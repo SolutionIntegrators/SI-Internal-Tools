@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client Update Generator — Solution Integrators</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Questrial&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --si-burnt: #A34F2B;
+    --si-denim: #3A4F5E;
+    --si-linen: #FCF1E8;
+    --si-yellow: #D28733;
+    --si-dark: #1E1E1E;
+    --font-ui: 'DM Sans', sans-serif;
+    --font-body: 'Questrial', sans-serif;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --border: 0.5px solid #E0D8D0;
+    --border-strong: 0.5px solid #C8BFB5;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--si-linen);
+    font-family: var(--font-ui);
+    color: var(--si-dark);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px 60px;
+    min-height: 100vh;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    border: var(--border);
+    padding: 32px;
+    width: 100%;
+    max-width: 680px;
+  }
+
+  .brand-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: var(--border);
+  }
+
+  .brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--si-burnt);
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--si-burnt);
+  }
+
+  .brand-divider {
+    width: 1px;
+    height: 14px;
+    background: #D8CFC6;
+  }
+
+  .brand-tool {
+    font-size: 13px;
+    color: #888;
+    font-weight: 400;
+  }
+
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  select, textarea.inp {
+    width: 100%;
+    padding: 10px 13px;
+    border: var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--si-dark);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    appearance: none;
+    transition: border-color .15s;
+    outline: none;
+  }
+
+  select:focus, textarea.inp:focus {
+    border-color: var(--si-burnt);
+  }
+
+  textarea.inp {
+    font-family: var(--font-body);
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.6;
+  }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+
+  .hint {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 2px;
+  }
+
+  .divider {
+    border: none;
+    border-top: var(--border);
+    margin: 20px 0;
+  }
+
+  .sec-lbl {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
+
+  .chip {
+    padding: 6px 13px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: var(--border-strong);
+    background: #faf8f5;
+    color: #666;
+    transition: all .15s;
+    user-select: none;
+    font-family: var(--font-ui);
+  }
+
+  .chip:hover { border-color: var(--si-burnt); color: var(--si-burnt); }
+  .chip.on { background: var(--si-denim); color: #fff; border-color: var(--si-denim); }
+
+  .gen-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--si-burnt);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    transition: opacity .15s;
+  }
+
+  .gen-btn:hover { opacity: .87; }
+  .gen-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: none;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .err {
+    font-size: 13px;
+    color: #b91c1c;
+    padding: 10px 13px;
+    background: #fef2f2;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid #fecaca;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .out-card {
+    background: #faf8f5;
+    border: var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: none;
+  }
+
+  .out-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .out-lbl {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: #888;
+  }
+
+  .copy-btn {
+    padding: 6px 13px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 500;
+    border: var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all .15s;
+  }
+
+  .copy-btn:hover { color: var(--si-dark); border-color: #aaa; }
+  .copy-btn.done { background: var(--si-denim); color: #fff; border-color: var(--si-denim); }
+
+  textarea.out-txt {
+    width: 100%;
+    min-height: 120px;
+    border: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 14px;
+    color: var(--si-dark);
+    resize: vertical;
+    line-height: 1.7;
+    outline: none;
+  }
+
+  .badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: var(--border);
+  }
+
+  .badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--font-ui);
+  }
+
+  .b-open { background: #E6F1FB; color: #0C447C; }
+  .b-wip { background: #FAEEDA; color: #633806; }
+  .b-review { background: #EAF3DE; color: #27500A; }
+
+  .loading-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #aaa;
+    padding: 10px 0;
+  }
+
+  .mini-spin {
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid #ddd;
+    border-top-color: var(--si-burnt);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  .retry-link {
+    color: var(--si-burnt);
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 13px;
+  }
+
+  @media (max-width: 520px) {
+    .card { padding: 20px; }
+    .row { grid-template-columns: 1fr; }
+    body { padding: 20px 12px 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div class="brand-header">
+    <div class="brand-dot"></div>
+    <span class="brand-name">Solution Integrators</span>
+    <div class="brand-divider"></div>
+    <span class="brand-tool">Client Update Generator</span>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <span class="label">Client</span>
+      <div id="chWrap">
+        <div class="loading-row"><div class="mini-spin"></div> Loading from ClickUp…</div>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">Sender</span>
+      <select id="snSel">
+        <option value="Ashley">Ashley (Founder)</option>
+        <option value="Montana">Montana (Client Services)</option>
+      </select>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="sec-lbl"><i class="ti ti-message" style="font-size:14px"></i> Update type</div>
+  <div class="chip-row" id="typeChips">
+    <div class="chip on" data-v="checkin">General check-in</div>
+    <div class="chip" data-v="progress">Progress update</div>
+    <div class="chip" data-v="milestone">Milestone reached</div>
+    <div class="chip" data-v="delay">Delay / timeline shift</div>
+    <div class="chip" data-v="action">Action needed from client</div>
+    <div class="chip" data-v="complete">Work complete</div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="sec-lbl"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i> Tone</div>
+  <div class="chip-row" id="toneChips">
+    <div class="chip on" data-v="warm">Warm</div>
+    <div class="chip" data-v="professional">Professional</div>
+    <div class="chip" data-v="reassure">Reassuring</div>
+    <div class="chip" data-v="brief">Brief &amp; casual</div>
+    <div class="chip" data-v="urgent">Urgent</div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="row">
+    <div class="field">
+      <span class="label">Things to include</span>
+      <textarea class="inp" id="include" placeholder="e.g. mention the Airtable base is live, note we're waiting on their feedback…"></textarea>
+      <span class="hint">Specific details or points to hit</span>
+    </div>
+    <div class="field">
+      <span class="label">Things to leave out</span>
+      <textarea class="inp" id="exclude" placeholder="e.g. don't mention the workflow delay, skip onboarding…"></textarea>
+      <span class="hint">Topics or details to avoid</span>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="err" id="err"></div>
+
+  <button class="gen-btn" id="genBtn" onclick="run()">
+    <div class="spinner" id="spin"></div>
+    <i class="ti ti-refresh" style="font-size:15px"></i>
+    <span id="btnLbl">Pull from ClickUp &amp; generate update</span>
+  </button>
+
+  <div class="out-card" id="outCard">
+    <div class="out-top">
+      <span class="out-lbl">Draft message</span>
+      <button class="copy-btn" id="cpBtn" onclick="doCopy()">
+        <i class="ti ti-copy" style="font-size:14px"></i> Copy
+      </button>
+    </div>
+    <textarea class="out-txt" id="outTxt" spellcheck="true"></textarea>
+    <div class="badges" id="badges"></div>
+  </div>
+
+</div>
+
+<script>
+const SPACE_ID = '12820868';
+let updateType = 'checkin', tone = 'warm';
+
+const TYPE_DESC = {
+  checkin: 'a friendly general check-in to let the client know things are moving and they can reach out if needed',
+  progress: 'a clear update on what has been completed and what is actively in progress',
+  milestone: 'celebrating or noting that a key milestone has been reached',
+  delay: 'an honest and professional note about a timeline shift or delay, framed constructively',
+  action: 'a message that makes clear there is something specific the client needs to do or provide before work can continue',
+  complete: 'a wrap-up message letting the client know the work is done or nearly done'
+};
+
+const TONE_DESC = {
+  warm: 'warm and personal, like a trusted colleague checking in',
+  professional: 'polished and professional, clear and direct',
+  reassure: 'reassuring and confidence-building — they are in good hands and things are moving',
+  brief: 'short and casual, a quick friendly note',
+  urgent: 'clear and action-oriented — something needs attention'
+};
+
+async function claude(system, user) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system,
+      messages: [{ role: 'user', content: user }],
+      mcp_servers: [{ type: 'url', url: 'https://mcp.clickup.com/mcp', name: 'clickup' }]
+    })
+  });
+  return await r.json();
+}
+
+async function loadClients() {
+  const wrap = document.getElementById('chWrap');
+  try {
+    const d = await claude(
+      `You are an internal assistant for Solution Integrators. Use the ClickUp MCP to fetch all lists inside space ID ${SPACE_ID}. Return ONLY a raw JSON array — no markdown, no backticks, no preamble — where each item has: { "id": "list_id", "name": "list_name" }. Only include lists that appear to be active client projects. Exclude archived, template, or internal lists. Sort alphabetically by name.`,
+      `Fetch all active client lists from ClickUp space ${SPACE_ID} and return them as a JSON array.`
+    );
+    const text = (d.content || []).map(b => b.text || '').join('').trim();
+    const lists = JSON.parse(text.replace(/```json|```/g, '').trim());
+    if (!lists.length) throw new Error('empty');
+
+    const sel = document.createElement('select');
+    sel.id = 'chSel';
+    const def = document.createElement('option');
+    def.value = ''; def.textContent = 'Select a client…';
+    sel.appendChild(def);
+    lists.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l.id; o.textContent = l.name;
+      sel.appendChild(o);
+    });
+    wrap.innerHTML = '';
+    wrap.appendChild(sel);
+  } catch(e) {
+    wrap.innerHTML = `<div style="font-size:13px;color:#b91c1c;padding:8px 0">Could not load clients. <span class="retry-link" onclick="loadClients()">Retry</span></div>`;
+  }
+}
+
+document.getElementById('typeChips').addEventListener('click', e => {
+  const ch = e.target.closest('.chip'); if (!ch) return;
+  document.querySelectorAll('#typeChips .chip').forEach(c => c.classList.remove('on'));
+  ch.classList.add('on'); updateType = ch.dataset.v;
+});
+
+document.getElementById('toneChips').addEventListener('click', e => {
+  const ch = e.target.closest('.chip'); if (!ch) return;
+  document.querySelectorAll('#toneChips .chip').forEach(c => c.classList.remove('on'));
+  ch.classList.add('on'); tone = ch.dataset.v;
+});
+
+async function run() {
+  const chSel = document.getElementById('chSel');
+  const chId = chSel ? chSel.value : '';
+  const chName = chSel ? chSel.options[chSel.selectedIndex]?.text : '';
+  const sender = document.getElementById('snSel').value;
+  const include = document.getElementById('include').value.trim();
+  const exclude = document.getElementById('exclude').value.trim();
+  const errEl = document.getElementById('err');
+  errEl.style.display = 'none';
+
+  if (!chId) { errEl.textContent = 'Please select a client first.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('genBtn');
+  const spin = document.getElementById('spin');
+  const lbl = document.getElementById('btnLbl');
+  btn.disabled = true; spin.style.display = 'block'; lbl.textContent = 'Fetching task data from ClickUp…';
+
+  try {
+    const taskData = await claude(
+      `You are an internal assistant for Solution Integrators. Use the ClickUp MCP to fetch tasks from the list with the provided ID. Count tasks by status and return ONLY a raw JSON object — no markdown, no backticks — with: { "openTasks": number, "inProgressTasks": number, "readyForReview": number, "recentActivity": "1 sentence summary of what is actively being worked on", "nextSteps": "1 sentence on what comes next or empty string" }. Status mapping: open/todo/not started = openTasks, in progress = inProgressTasks, ready for review = readyForReview. Ignore complete or closed tasks.`,
+      `List ID: ${chId}\nList name: ${chName}\nFetch tasks and return the JSON summary.`
+    );
+    const taskText = (taskData.content || []).map(b => b.text || '').join('').trim();
+    const meta = JSON.parse(taskText.replace(/```json|```/g, '').trim());
+
+    lbl.textContent = 'Drafting message…';
+
+    const includeStr = include ? `\nThings to include: ${include}` : '';
+    const excludeStr = exclude ? `\nThings to leave out: ${exclude}` : '';
+
+    const msgData = await claude(
+      `You write short client update messages for Solution Integrators, a done-for-you systems and operations consultancy. 2-4 sentences max. No subject line. No sign-off. No filler openers. Direct and human. Never use: game-changer, harness, unlock, elevate, unleash, skyrocket, delve, ensure, revolutionize, uplevel. No bullet points. Respect inclusions and exclusions exactly. Return only the message text.`,
+      `Sender: ${sender}\nClient: ${chName}\nOpen tasks: ${meta.openTasks}\nIn progress: ${meta.inProgressTasks}\nReady for review: ${meta.readyForReview}\nRecent activity: ${meta.recentActivity}\nNext steps: ${meta.nextSteps}\nUpdate type: ${TYPE_DESC[updateType]}\nTone: ${TONE_DESC[tone]}${includeStr}${excludeStr}\n\nWrite the client update message.`
+    );
+
+    const msg = (msgData.content || []).map(b => b.text || '').join('').trim();
+    document.getElementById('outTxt').value = msg;
+
+    const bd = document.getElementById('badges');
+    bd.innerHTML = '';
+    if (meta.openTasks) bd.innerHTML += `<span class="badge b-open">${meta.openTasks} open</span>`;
+    if (meta.inProgressTasks) bd.innerHTML += `<span class="badge b-wip">${meta.inProgressTasks} in progress</span>`;
+    if (meta.readyForReview) bd.innerHTML += `<span class="badge b-review">${meta.readyForReview} ready for review</span>`;
+
+    document.getElementById('outCard').style.display = 'block';
+  } catch(e) {
+    errEl.textContent = 'Something went wrong. Try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; spin.style.display = 'none'; lbl.textContent = 'Pull from ClickUp & generate update';
+  }
+}
+
+function doCopy() {
+  const txt = document.getElementById('outTxt').value;
+  navigator.clipboard.writeText(txt).then(() => {
+    const b = document.getElementById('cpBtn');
+    b.classList.add('done');
+    b.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i> Copied';
+    setTimeout(() => { b.classList.remove('done'); b.innerHTML = '<i class="ti ti-copy" style="font-size:14px"></i> Copy'; }, 2000);
+  });
+}
+
+loadClients();
+</script>
+</body>
+</html>
