@@ -1,0 +1,80 @@
+name = "homebase"
+main = "src/index.js"
+compatibility_date = "2026-08-16"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# /api/* never matches a static file, but say so explicitly so a future
+# public/api/... file can't shadow the API.
+run_worker_first = ["/api/*"]
+
+[observability]
+enabled = true
+
+# Optional: the last-good-snapshot cache. Create it with
+#   npx wrangler kv namespace create SNAPSHOTS
+# then paste the id below and uncomment. Without it the dashboard still works,
+# it just waits for live data on every load.
+# [[kv_namespaces]]
+# binding = "SNAPSHOTS"
+# id = "PASTE_KV_NAMESPACE_ID"
+
+# Non-secret configuration. Secrets go in `wrangler secret put` — never here.
+[vars]
+TIMEZONE = "America/New_York"
+REVENUE_GOAL = "7500"
+# low | medium | high — how hard Claude works on a chat answer.
+CHAT_EFFORT = "medium"
+
+# --- ClickUp -----------------------------------------------------------------
+CLICKUP_TEAM_ID = ""
+# Comma-separated list ids. Leave WORK empty to search the whole workspace.
+CLICKUP_WORK_LIST_IDS = ""
+CLICKUP_SUPPORT_LIST_IDS = ""
+# Only needed if the API token belongs to someone other than Ashley.
+CLICKUP_USER_ID = ""
+READY_FOR_REVIEW_STATUSES = "ready for review,in review,review"
+CLOSED_STATUSES = "complete,closed,done,cancelled,canceled"
+
+# --- Google Calendar ---------------------------------------------------------
+GOOGLE_CALENDAR_ID = "primary"
+
+# --- Airtable: money and metrics hub (SIMoney) -------------------------------
+AIRTABLE_MONEY_BASE_ID = ""
+AIRTABLE_MONEY_TABLE = ""
+AIRTABLE_MONEY_DATE_FIELD = "Date"
+AIRTABLE_MONEY_AMOUNT_FIELD = "Amount"
+AIRTABLE_MONEY_CLIENT_FIELD = "Client"
+# Field holding the expected date for money not yet in. Defaults to the date field.
+AIRTABLE_MONEY_EXPECTED_FIELD = ""
+# Leave the status field empty to count every row in the week as collected.
+AIRTABLE_MONEY_STATUS_FIELD = ""
+AIRTABLE_MONEY_PAID_VALUES = "Paid,Received,Won,Collected"
+
+# --- Airtable: bills and expenses --------------------------------------------
+AIRTABLE_BILLS_BASE_ID = ""
+AIRTABLE_BILLS_TABLE = ""
+AIRTABLE_BILLS_NAME_FIELD = "Name"
+AIRTABLE_BILLS_AMOUNT_FIELD = "Amount"
+AIRTABLE_BILLS_DUE_FIELD = "Due"
+
+# --- Airtable: content planning ----------------------------------------------
+AIRTABLE_CONTENT_BASE_ID = ""
+AIRTABLE_CONTENT_TABLE = ""
+AIRTABLE_CONTENT_TITLE_FIELD = "Title"
+AIRTABLE_CONTENT_STAGE_FIELD = "Stage"
+AIRTABLE_CONTENT_PLATFORM_FIELD = "Platform"
+
+# --- Supabase ----------------------------------------------------------------
+SUPABASE_URL = ""
+# Tables the chat panel may read. Empty means any table it names.
+SUPABASE_TABLES = ""
+SUPABASE_SEARCH_COLUMNS = "name,title,email,status"
+# Leave the projects table empty to derive client projects from ClickUp instead.
+SUPABASE_PROJECTS_TABLE = ""
+SUPABASE_PROJECT_NAME_FIELD = "name"
+SUPABASE_PROJECT_PHASE_FIELD = "phase"
+SUPABASE_PROJECT_STATUS_FIELD = "status"
+SUPABASE_PROJECT_NOTE_FIELD = "note"

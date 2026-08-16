@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Base — Solution Integrators</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Questrial&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --burnt-orange: #A34F2B;
+    --sunset-yellow: #D28733;
+    --denim-blue: #3A4F5E;
+    --linen: #FCF1E8;
+    --white: #FFFFFF;
+    --dark-text: #1E1E1E;
+    --denim-soft: #e8edf0;
+    --yellow-soft: #f6e6cf;
+    --orange-soft: #f1ddd2;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--linen);
+    color: var(--dark-text);
+    font-family: 'Questrial', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: Georgia, 'Times New Roman', serif; margin: 0; }
+
+  .eyebrow {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+
+  button {
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    border: none;
+  }
+
+  header {
+    background: var(--denim-blue);
+    color: var(--linen);
+    padding: 28px 32px 24px;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header-top .eyebrow { color: var(--sunset-yellow); margin-bottom: 6px; }
+  header h1 { font-size: 34px; color: var(--white); }
+  .refresh-block { text-align: right; }
+  .as-of { font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
+  .refresh-btn {
+    background: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    transition: opacity 0.15s;
+  }
+  .refresh-btn:hover { opacity: 0.85; }
+  .refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .focus-banner {
+    max-width: 1280px;
+    margin: -20px auto 0;
+    padding: 0 32px;
+  }
+  .focus-inner {
+    background: var(--white);
+    border-left: 4px solid var(--burnt-orange);
+    border-radius: 4px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 18px rgba(30,30,30,0.06);
+  }
+  .focus-inner .eyebrow { color: var(--burnt-orange); margin-bottom: 8px; }
+  #focusText {
+    font-family: Georgia, serif;
+    font-size: 20px;
+    line-height: 1.4;
+    color: var(--dark-text);
+    outline: none;
+    min-height: 28px;
+  }
+  #focusText:empty:before {
+    content: attr(data-placeholder);
+    color: #999;
+  }
+  .focus-hint { font-size: 11px; color: #999; margin-top: 8px; font-family: 'DM Sans', sans-serif; }
+
+  .layout {
+    max-width: 1280px;
+    margin: 28px auto 60px;
+    padding: 0 32px;
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .dashboard-grid { display: block; }
+
+  .vitals-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .vital { flex: 1; min-width: 150px; background: var(--white); border-radius: 6px; padding: 16px 18px; box-shadow: 0 2px 10px rgba(30,30,30,0.05); }
+  .vital-num { font-family: Georgia, serif; font-size: 24px; color: var(--denim-blue); }
+  .vital-num.alert { color: var(--burnt-orange); }
+  .vital-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #777; font-family: 'DM Sans', sans-serif; margin-top: 3px; }
+
+  .section-block { margin-bottom: 30px; }
+  .section-label {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--burnt-orange);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--burnt-orange);
+  }
+  .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .section-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 900px) {
+    .section-grid.cols-3 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .section-grid, .section-grid.cols-3 { grid-template-columns: 1fr; }
+    .vitals-row { flex-direction: column; }
+  }
+
+  .revenue-progress-track { background: var(--linen); height: 10px; border-radius: 6px; overflow: hidden; margin: 12px 0 8px; }
+  .revenue-progress-fill { background: var(--burnt-orange); height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+  .revenue-figures { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+  .revenue-current { font-family: Georgia, serif; font-size: 28px; color: var(--burnt-orange); }
+  .revenue-goal-label { font-size: 12px; color: #777; font-family: 'DM Sans', sans-serif; }
+  .revenue-note { font-size: 12px; color: #777; margin-top: 6px; }
+
+  .card {
+    background: var(--white);
+    border-radius: 6px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(30,30,30,0.05);
+  }
+  .card.span-2 { grid-column: 1 / -1; }
+  .card h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--denim-blue);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--linen);
+  }
+  .empty-row { font-size: 13px; color: #999; font-style: italic; }
+
+  .row { padding: 9px 0; border-bottom: 1px solid #f4ede4; }
+  .row:last-child { border-bottom: none; }
+  .row-title { font-weight: 600; font-size: 14px; color: var(--dark-text); }
+  .row-sub { font-size: 12px; color: #777; margin-top: 2px; }
+
+  .pill {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-left: 8px;
+  }
+  .pill-on_track { background: var(--yellow-soft); color: #8a5c1c; }
+  .pill-needs_attention { background: var(--burnt-orange); color: var(--white); }
+  .pill-stalled { background: var(--denim-soft); color: var(--denim-blue); }
+
+  .loading-msg, .error-msg { font-size: 13px; padding: 20px 4px; color: #777; }
+  .error-msg { color: var(--burnt-orange); }
+  .error-msg button { text-decoration: underline; background: none; color: var(--burnt-orange); font-size: 13px; padding: 0; margin-left: 6px; }
+  .warning-note { font-size: 11px; color: #999; margin-top: 8px; font-family: 'DM Sans', sans-serif; }
+
+  /* Chat panel */
+  .chat-panel {
+    background: var(--white);
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(30,30,30,0.05);
+    display: flex;
+    flex-direction: column;
+    height: 640px;
+    position: sticky;
+    top: 24px;
+  }
+  .chat-header {
+    background: var(--denim-blue);
+    color: var(--white);
+    padding: 16px 20px;
+    border-radius: 6px 6px 0 0;
+  }
+  .chat-header h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  .chat-header p { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-empty { font-size: 13px; color: #999; padding: 8px 4px; line-height: 1.6; }
+  .msg { max-width: 88%; padding: 9px 13px; border-radius: 10px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }
+  .msg-user { align-self: flex-end; background: var(--burnt-orange); color: var(--white); border-bottom-right-radius: 3px; }
+  .msg-assistant { align-self: flex-start; background: var(--linen); color: var(--dark-text); border-bottom-left-radius: 3px; }
+  .msg-thinking { align-self: flex-start; font-size: 12px; color: #999; font-style: italic; padding: 4px 13px; }
+
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--linen);
+  }
+  #chatInput {
+    flex: 1;
+    font-family: 'Questrial', sans-serif;
+    font-size: 13.5px;
+    padding: 9px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    resize: none;
+    outline: none;
+  }
+  #chatInput:focus { border-color: var(--burnt-orange); }
+  .send-btn {
+    background: var(--denim-blue);
+    color: var(--white);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 0 16px;
+    border-radius: 6px;
+  }
+  .send-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .mobile-tabs { display: none; gap: 8px; padding: 0 32px; margin-top: 16px; }
+  @media (max-width: 900px) {
+    .mobile-tabs { display: flex; }
+    .layout > div { display: none; }
+    .layout > div.active-mobile { display: block; }
+  }
+  .tab-btn {
+    background: var(--white);
+    color: var(--denim-blue);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 20px;
+  }
+  .tab-btn.active { background: var(--denim-blue); color: var(--white); }
+
+  /* Sign-in gate */
+  .gate {
+    position: fixed;
+    inset: 0;
+    background: var(--denim-blue);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 24px;
+  }
+  .gate.visible { display: flex; }
+  .gate-card {
+    background: var(--white);
+    border-radius: 6px;
+    padding: 32px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  }
+  .gate-card .eyebrow { color: var(--burnt-orange); margin-bottom: 8px; }
+  .gate-card h2 { font-size: 26px; margin-bottom: 18px; }
+  .gate-card input {
+    width: 100%;
+    font-family: 'Questrial', sans-serif;
+    font-size: 15px;
+    padding: 11px 13px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    outline: none;
+    margin-bottom: 12px;
+  }
+  .gate-card input:focus { border-color: var(--burnt-orange); }
+  .gate-card button {
+    width: 100%;
+    background: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 12px;
+    border-radius: 4px;
+  }
+  .gate-error { font-size: 13px; color: var(--burnt-orange); margin-top: 10px; min-height: 18px; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <form class="gate-card" id="gateForm">
+    <div class="eyebrow">Solution Integrators — Internal</div>
+    <h2>Home Base</h2>
+    <input type="password" id="gatePassword" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div class="gate-error" id="gateError"></div>
+  </form>
+</div>
+
+<header>
+  <div class="header-top">
+    <div>
+      <div class="eyebrow">Solution Integrators — Internal</div>
+      <h1>Home Base</h1>
+    </div>
+    <div class="refresh-block">
+      <div class="as-of" id="asOfLabel">Not loaded yet</div>
+      <button class="refresh-btn" id="refreshBtn">Refresh</button>
+    </div>
+  </div>
+</header>
+
+<div class="focus-banner">
+  <div class="focus-inner">
+    <div class="eyebrow">Focus</div>
+    <div id="focusText" contenteditable="true" data-placeholder="Click to set what matters most right now..."></div>
+    <div class="focus-hint">Click to edit. Saves automatically.</div>
+  </div>
+</div>
+
+<div class="mobile-tabs">
+  <button class="tab-btn active" id="tabDashBtn">Dashboard</button>
+  <button class="tab-btn" id="tabChatBtn">Chat</button>
+</div>
+
+<div class="layout">
+  <div class="active-mobile" id="dashboardCol">
+    <div class="dashboard-grid" id="dashboardGrid"></div>
+  </div>
+
+  <div id="chatCol">
+    <div class="chat-panel">
+      <div class="chat-header">
+        <h2>Ask about your projects</h2>
+        <p>Pulls live from ClickUp, Calendar, Airtable, and your portal</p>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-empty">Ask things like "what's the status on the Comma Mama project" or "what's overdue right now." This reads your tools — it can't create or change anything.</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" rows="1" placeholder="Ask about a client or project..."></textarea>
+        <button class="send-btn" id="sendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+
+</body>
+</html>

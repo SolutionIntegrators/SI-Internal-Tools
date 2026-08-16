@@ -1,0 +1,19 @@
+{
+  "name": "homebase",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ashley's Home Base dashboard — Cloudflare Worker + static frontend",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.js",
+    "google-auth": "node scripts/google-oauth.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
