@@ -7,12 +7,12 @@ import {
   selectDueSoon,
   selectReadyForReview,
   selectTickets,
-  selectBillsDueSoon,
-  sumCollectedThisWeek,
   revenueNote,
   splitCalendar,
+  contentStage,
 } from "../src/lib/filters.js";
-import { toAmount, toText } from "../src/services/airtable.js";
+import { billsDueSoon } from "../src/routes/money.js";
+import { projectHealth } from "../src/routes/tasks.js";
 import { startOfWeek, localDate, relativeDay, addDays } from "../src/lib/dates.js";
 
 const TZ = "America/New_York";
@@ -72,40 +72,44 @@ test("tickets count everything open but only flag past two days", () => {
   assert.deepEqual(result.overdue.map((t) => t.name), ["stale"]);
 });
 
-test("bills cover the next seven days and nothing outside them", () => {
-  const today = localDate(new Date(NOW), TZ);
-  const records = [
-    { fields: { Due: addDays(today, -1) } },
-    { fields: { Due: today } },
-    { fields: { Due: addDays(today, 7) } },
-    { fields: { Due: addDays(today, 8) } },
-    { fields: {} },
-  ];
-  const picked = selectBillsDueSoon(records, { dueField: "Due", now: NOW, tz: TZ });
-  assert.deepEqual(picked.map((p) => p.due), [today, addDays(today, 7)]);
-});
-
-test("revenue counts Monday through today, only rows marked paid", () => {
-  const weekStart = startOfWeek(new Date(NOW), TZ); // Monday 2026-08-17
+test("bills expand from their recurrence rules and stop at seven days", () => {
   const today = localDate(new Date(NOW), TZ); // Wednesday 2026-08-19
   const records = [
-    { fields: { Date: weekStart, Amount: 1500, Status: "Paid" } },
-    { fields: { Date: today, Amount: "$2,000", Status: "Received" } },
-    { fields: { Date: today, Amount: 900, Status: "Pending" } },
-    { fields: { Date: addDays(weekStart, -1), Amount: 5000, Status: "Paid" } },
-    { fields: { Date: addDays(today, 2), Amount: 4000, Status: "Paid" } },
+    // Monthly on the 20th — tomorrow.
+    { fields: { Name: "James's Car", Amount: 500, Type: "Expense", Book: "Household", Active: true, Frequency: "Monthly", "Day of Month": 20 } },
+    // Monthly on the 1st — outside the window.
+    { fields: { Name: "Insurance", Amount: 200, Type: "Expense", Book: "Household", Active: true, Frequency: "Monthly", "Day of Month": 1 } },
+    // Income, not a bill.
+    { fields: { Name: "Retainer", Amount: 750, Type: "Income", Book: "Solution Integrators", Active: true, Frequency: "Monthly", "Day of Month": 21 } },
+    // Unchecked Active — Airtable omits the field entirely, which must not read as active.
+    { fields: { Name: "Cancelled tool", Amount: 40, Type: "Expense", Book: "Solution Integrators", Frequency: "Monthly", "Day of Month": 21 } },
+    // One-time inside the window.
+    { fields: { Name: "Capital One", Amount: 2500, Type: "Expense", Book: "Solution Integrators", Active: true, Frequency: "One-time", "Anchor or One-Time Date": addDays(today, 3) } },
   ];
-  const total = sumCollectedThisWeek(records, {
-    dateField: "Date",
-    amountField: "Amount",
-    statusField: "Status",
-    paidValues: ["Paid", "Received"],
-    weekStart,
-    today,
-    toAmount,
-    toText,
-  });
-  assert.equal(total, 3500);
+  const bills = billsDueSoon(records, { env: {}, today });
+  assert.deepEqual(bills.map((b) => b.name), ["James's Car", "Capital One"]);
+  assert.deepEqual(bills.map((b) => b.amount), ["$500", "$2,500"]);
+});
+
+test("bills can be limited to one set of books", () => {
+  const today = localDate(new Date(NOW), TZ);
+  const records = [
+    { fields: { Name: "Household bill", Amount: 500, Type: "Expense", Book: "Household", Active: true, Frequency: "Monthly", "Day of Month": 20 } },
+    { fields: { Name: "Business bill", Amount: 99, Type: "Expense", Book: "Solution Integrators", Active: true, Frequency: "Monthly", "Day of Month": 20 } },
+  ];
+  const bills = billsDueSoon(records, { env: { AIRTABLE_BILLS_BOOKS: "Solution Integrators" }, today });
+  assert.deepEqual(bills.map((b) => b.name), ["Business bill"]);
+});
+
+test("content statuses collapse onto the four stages the card renders", () => {
+  assert.equal(contentStage("Idea"), "idea");
+  assert.equal(contentStage("To Be Written "), "drafted");
+  assert.equal(contentStage("Ready for Krystle"), "drafted");
+  assert.equal(contentStage("Ready for Scheduling"), "drafted");
+  assert.equal(contentStage("Schedule w/Buffer"), "drafted");
+  assert.equal(contentStage("Scheduled"), "scheduled");
+  assert.equal(contentStage("Posted"), "posted");
+  assert.equal(contentStage("Created from ClickUp"), "idea");
 });
 
 test("the revenue note is arithmetic, not a model call", () => {
@@ -143,4 +147,30 @@ test("due labels read the way a person would say them", () => {
   assert.equal(relativeDay(new Date(NOW + 3600000), now, TZ), "today");
   assert.equal(relativeDay(new Date(NOW + DAY), now, TZ), "tomorrow");
   assert.equal(relativeDay(new Date(NOW + 3 * DAY), now, TZ), "Sat");
+});
+
+test("project health comes from dates, since Project Status never says 'in trouble'", () => {
+  const base = { today: "2026-08-16", ongoingValue: "Ongoing Support" };
+  // Implementation was due last month and the build is still in execution.
+  assert.equal(
+    projectHealth({ ...base, status: "Execution 👩🏾‍🏭", implementation: "2026-07-28", supportEnd: "2026-08-25" }),
+    "needs_attention",
+  );
+  // Implementation still ahead.
+  assert.equal(
+    projectHealth({ ...base, status: "Invoice Paid 🤑", implementation: "2026-09-14", supportEnd: "2026-12-31" }),
+    "on_track",
+  );
+  // Retainer clients sit past their implementation date by design.
+  assert.equal(
+    projectHealth({ ...base, status: "Ongoing Support 💁🏾‍♀️", implementation: "2024-10-15", supportEnd: "2026-12-31" }),
+    "on_track",
+  );
+  // Support ended and it isn't a retainer — should have been closed out.
+  assert.equal(
+    projectHealth({ ...base, status: "Execution 👩🏾‍🏭", implementation: "2026-06-01", supportEnd: "2026-08-03" }),
+    "stalled",
+  );
+  // Missing dates fall back to on_track rather than inventing a problem.
+  assert.equal(projectHealth({ ...base, status: "Execution", implementation: "", supportEnd: "" }), "on_track");
 });

@@ -2,7 +2,7 @@
 // pure functions over already-fetched records so they can be tested directly
 // (test/filters.test.js) and so the answers never drift between reloads.
 
-import { DAY_MS, daysSince, localDate, addDays, isBetween } from "./dates.js";
+import { DAY_MS, daysSince, localDate } from "./dates.js";
 import { statusName, dueMs, createdMs } from "../services/clickup.js";
 import { isAllDay, startsAt } from "../services/google.js";
 
@@ -97,35 +97,6 @@ export function splitCalendar(events, { now, tz, limit = 5 }) {
   return { nextCalls, calendarToday, calendarWeek };
 }
 
-/** Bills due from today through the next 7 days, and nothing else. */
-export function selectBillsDueSoon(records, { dueField, now, tz, limit = 5 }) {
-  const today = localDate(now, tz);
-  const horizon = addDays(today, 7);
-  return records
-    .map((record) => ({ record, due: String(record.fields?.[dueField] || "").slice(0, 10) }))
-    .filter(({ due }) => due && isBetween(due, today, horizon))
-    .sort((a, b) => a.due.localeCompare(b.due))
-    .slice(0, limit);
-}
-
-/**
- * Revenue booked Monday through today — what has actually been collected or
- * won this week, not the whole pipeline.
- */
-export function sumCollectedThisWeek(records, { dateField, amountField, statusField, paidValues, weekStart, today, toAmount, toText }) {
-  const wanted = paidValues.map((value) => value.toLowerCase());
-  return records
-    .filter((record) => {
-      const date = String(record.fields?.[dateField] || "").slice(0, 10);
-      return date && isBetween(date, weekStart, today);
-    })
-    .filter((record) => {
-      if (!statusField || !wanted.length) return true;
-      return wanted.includes(toText(record.fields?.[statusField]).toLowerCase());
-    })
-    .reduce((total, record) => total + toAmount(record.fields?.[amountField]), 0);
-}
-
 /** The revenue card's one-liner. Plain arithmetic, no model call. */
 export function revenueNote(current, goal) {
   if (goal <= 0) return "";
@@ -135,4 +106,18 @@ export function revenueNote(current, goal) {
   if (share >= 0.75) return `$${remaining.toLocaleString("en-US")} to go — nearly there.`;
   if (share <= 0.1) return `$${remaining.toLocaleString("en-US")} to go, week still young.`;
   return `$${remaining.toLocaleString("en-US")} to go.`;
+}
+
+/**
+ * Map a Social Media Management status onto the four stages the content card
+ * renders. The live statuses are Idea, To Be Written, Ready for Krystle,
+ * Ready for Scheduling, Schedule w/Buffer, Scheduled, Posted, Archive,
+ * Repurpose, and Created from ClickUp.
+ */
+export function contentStage(status) {
+  const text = status.toLowerCase();
+  if (text.includes("posted")) return "posted";
+  if (text === "scheduled") return "scheduled";
+  if (text.includes("schedul") || text.includes("ready") || text.includes("written")) return "drafted";
+  return "idea";
 }

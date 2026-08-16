@@ -23,8 +23,8 @@ enabled = true
 
 # Non-secret configuration. Secrets go in `wrangler secret put` — never here.
 [vars]
-TIMEZONE = "America/New_York"
-REVENUE_GOAL = "7500"
+TIMEZONE = "America/Chicago"
+REVENUE_GOAL = "5000"
 # low | medium | high — how hard Claude works on a chat answer.
 CHAT_EFFORT = "medium"
 
@@ -41,38 +41,72 @@ CLOSED_STATUSES = "complete,closed,done,cancelled,canceled"
 # --- Google Calendar ---------------------------------------------------------
 GOOGLE_CALENDAR_ID = "primary"
 
-# --- Airtable: money and metrics hub (SIMoney) -------------------------------
-AIRTABLE_MONEY_BASE_ID = ""
-AIRTABLE_MONEY_TABLE = ""
-AIRTABLE_MONEY_DATE_FIELD = "Date"
-AIRTABLE_MONEY_AMOUNT_FIELD = "Amount"
-AIRTABLE_MONEY_CLIENT_FIELD = "Client"
-# Field holding the expected date for money not yet in. Defaults to the date field.
-AIRTABLE_MONEY_EXPECTED_FIELD = ""
-# Leave the status field empty to count every row in the week as collected.
-AIRTABLE_MONEY_STATUS_FIELD = ""
-AIRTABLE_MONEY_PAID_VALUES = "Paid,Received,Won,Collected"
+# --- Airtable: SI Money Metrics (appfVpfMqptf35xRa) ----------------------------
+# Revenue comes from Income Tracking; money still owed comes from Invoice Tracking.
+AIRTABLE_MONEY_BASE_ID = "appfVpfMqptf35xRa"
+AIRTABLE_INCOME_TABLE = "Income Tracking"
+AIRTABLE_INCOME_DATE_FIELD = "Date"
+AIRTABLE_INCOME_AMOUNT_FIELD = "Payment Amount"
+AIRTABLE_INCOME_STATUS_FIELD = "Status"
+# Status is blank on most Income Tracking rows, so the rule is "count it unless
+# it is explicitly marked unpaid" rather than "count it only if marked paid".
+AIRTABLE_INCOME_EXCLUDE_STATUSES = "Unpaid"
+AIRTABLE_INVOICE_TABLE = "Invoice Tracking"
+AIRTABLE_INVOICE_SUMMARY_FIELD = "Summary"
+AIRTABLE_INVOICE_STATUS_FIELD = "Status"
+AIRTABLE_INVOICE_DUE_FIELD = "Due Date"
+AIRTABLE_INVOICE_AMOUNT_FIELD = "Payment Amount"
+AIRTABLE_INVOICE_TOTAL_FIELD = "Invoice Total"
+# The client roster for the Client Projects card.
+AIRTABLE_PROJECTS_TABLE = "ALL Active Projects"
+AIRTABLE_PROJECT_NAME_FIELD = "Company Name"
+AIRTABLE_PROJECT_STATUS_FIELD = "Project Status"
+AIRTABLE_PROJECT_SERVICE_FIELD = "Service"
+AIRTABLE_PROJECT_IMPLEMENTATION_FIELD = "5️⃣ Implementation"
+AIRTABLE_PROJECT_SUPPORT_END_FIELD = "Support End"
+AIRTABLE_PROJECT_ONGOING_VALUE = "Ongoing Support"
 
-# --- Airtable: bills and expenses --------------------------------------------
-AIRTABLE_BILLS_BASE_ID = ""
-AIRTABLE_BILLS_TABLE = ""
+# --- Airtable: 99 Problems But Money Aint One (appQeUH0Lb6i3lxTL) --------------
+# Bills are recurrence rules, not dated rows — src/lib/recurrence.js expands them.
+AIRTABLE_BILLS_BASE_ID = "appQeUH0Lb6i3lxTL"
+AIRTABLE_BILLS_TABLE = "Recurring Items"
 AIRTABLE_BILLS_NAME_FIELD = "Name"
 AIRTABLE_BILLS_AMOUNT_FIELD = "Amount"
-AIRTABLE_BILLS_DUE_FIELD = "Due"
+AIRTABLE_BILLS_TYPE_FIELD = "Type"
+AIRTABLE_BILLS_EXPENSE_VALUE = "Expense"
+AIRTABLE_BILLS_BOOK_FIELD = "Book"
+AIRTABLE_BILLS_ACTIVE_FIELD = "Active"
+AIRTABLE_BILLS_FREQUENCY_FIELD = "Frequency"
+AIRTABLE_BILLS_DAY_FIELD = "Day of Month"
+AIRTABLE_BILLS_WEEKDAY_FIELD = "Weekday"
+AIRTABLE_BILLS_ANCHOR_FIELD = "Anchor or One-Time Date"
+# Which books to show bills from. Empty means all three (Solution Integrators,
+# Tindall Tech, Household). Set to "Solution Integrators" for business only.
+AIRTABLE_BILLS_BOOKS = ""
 
-# --- Airtable: content planning ----------------------------------------------
-AIRTABLE_CONTENT_BASE_ID = ""
-AIRTABLE_CONTENT_TABLE = ""
-AIRTABLE_CONTENT_TITLE_FIELD = "Title"
-AIRTABLE_CONTENT_STAGE_FIELD = "Stage"
-AIRTABLE_CONTENT_PLATFORM_FIELD = "Platform"
+# This week's revenue target, read live so changing it in Airtable changes the
+# dashboard. REVENUE_GOAL above is the fallback when the week has no row yet.
+AIRTABLE_GOALS_TABLE = "Weekly Revenue Goals"
+AIRTABLE_GOALS_WEEK_FIELD = "Week Start Date"
+AIRTABLE_GOALS_AMOUNT_FIELD = "Goal Amount"
+
+# --- Airtable: Solution Integrators Content Hub (appzyaY40KNIy3n4t) -----------
+AIRTABLE_CONTENT_BASE_ID = "appzyaY40KNIy3n4t"
+AIRTABLE_CONTENT_TABLE = "Social Media Management"
+AIRTABLE_CONTENT_TITLE_FIELD = "🛑 Name"
+AIRTABLE_CONTENT_STATUS_FIELD = "‼️ Status"
+AIRTABLE_CONTENT_TYPE_FIELD = "🛑 Content Type"
+AIRTABLE_CONTENT_DATE_FIELD = "Date to Be Posted"
 
 # --- Supabase ----------------------------------------------------------------
+# Optional. The dashboard does not need Supabase — client projects come from
+# Airtable above. Set these only to let the chat panel answer portal and LMS
+# questions; leaving SUPABASE_URL empty drops the service_role key entirely.
 SUPABASE_URL = ""
 # Tables the chat panel may read. Empty means any table it names.
 SUPABASE_TABLES = ""
 SUPABASE_SEARCH_COLUMNS = "name,title,email,status"
-# Leave the projects table empty to derive client projects from ClickUp instead.
+# Only used if the Airtable projects table above is cleared.
 SUPABASE_PROJECTS_TABLE = ""
 SUPABASE_PROJECT_NAME_FIELD = "name"
 SUPABASE_PROJECT_PHASE_FIELD = "phase"

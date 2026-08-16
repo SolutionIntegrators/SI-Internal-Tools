@@ -41,11 +41,15 @@ export const TOOL_DEFINITIONS = [
   {
     name: "search_airtable",
     description:
-      "Read records from one of Ashley's Airtable bases. 'money' is the payments and metrics hub, 'bills' is expenses, 'content' is content planning.",
+      "Read records from one of Ashley's Airtable tables. 'income' is payments received, 'invoices' is money still owed, 'bills' is recurring expenses and their schedules, 'goals' is the weekly revenue targets, 'content' is the social content pipeline.",
     input_schema: {
       type: "object",
       properties: {
-        base: { type: "string", enum: ["money", "bills", "content"], description: "Which base to read." },
+        base: {
+          type: "string",
+          enum: ["income", "invoices", "bills", "goals", "content"],
+          description: "Which table to read.",
+        },
         query: { type: "string", description: "Optional keywords to filter the returned records by." },
       },
       required: ["base"],
@@ -95,16 +99,18 @@ async function searchCalendar(env, { query, start_date: startDate, end_date: end
 }
 
 const AIRTABLE_BASES = {
-  money: ["AIRTABLE_MONEY_BASE_ID", "AIRTABLE_MONEY_TABLE"],
+  income: ["AIRTABLE_MONEY_BASE_ID", "AIRTABLE_INCOME_TABLE"],
+  invoices: ["AIRTABLE_MONEY_BASE_ID", "AIRTABLE_INVOICE_TABLE"],
   bills: ["AIRTABLE_BILLS_BASE_ID", "AIRTABLE_BILLS_TABLE"],
+  goals: ["AIRTABLE_BILLS_BASE_ID", "AIRTABLE_GOALS_TABLE"],
   content: ["AIRTABLE_CONTENT_BASE_ID", "AIRTABLE_CONTENT_TABLE"],
 };
 
 async function searchAirtable(env, { base, query }) {
   const mapping = AIRTABLE_BASES[base];
-  if (!mapping) return { error: `Unknown base "${base}". Use money, bills, or content.` };
+  if (!mapping) return { error: `Unknown table "${base}". Use ${Object.keys(AIRTABLE_BASES).join(", ")}.` };
   const [baseVar, tableVar] = mapping;
-  if (!env[baseVar]) return { error: `The ${base} base is not configured on this deployment.` };
+  if (!env[baseVar]) return { error: `The ${base} table is not configured on this deployment.` };
 
   const records = await airtable.listRecords(env, env[baseVar], env[tableVar], { maxRecords: 50 });
   const rows = records.map((record) => record.fields);

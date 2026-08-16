@@ -3,6 +3,7 @@ import { json, softly, requireVar } from "../lib/http.js";
 import { relativeDay } from "../lib/dates.js";
 import * as clickup from "../services/clickup.js";
 import * as supabase from "../services/supabase.js";
+import * as airtable from "../services/airtable.js";
 import {
   selectDueSoon,
   selectReadyForReview,
@@ -47,14 +48,7 @@ export async function handleTasks(env, ctx) {
           [],
         )
       : Promise.resolve([]),
-    env.SUPABASE_URL && env.SUPABASE_PROJECTS_TABLE
-      ? softly(
-          warnings,
-          "Supabase projects",
-          supabase.selectRows(env, env.SUPABASE_PROJECTS_TABLE, { limit: 25 }),
-          [],
-        )
-      : Promise.resolve(null),
+    softly(warnings, "Client projects", fetchProjects(env), null),
   ]);
 
   const assigneeId = env.CLICKUP_USER_ID || user?.id;
@@ -78,7 +72,7 @@ export async function handleTasks(env, ctx) {
         daysOpen: Math.floor((now - clickup.createdMs(ticket)) / 86400000),
       })),
     },
-    clientProjects: clientProjects({ projectRows, workTasks, env }),
+    clientProjects: clientProjects({ projectRows, workTasks, env, today: localDate(new Date(now), tz) }),
     warnings,
   };
 
@@ -87,19 +81,43 @@ export async function handleTasks(env, ctx) {
 }
 
 /**
- * Client projects come from the Supabase portal when it is configured, since
- * that is the customer-facing source of truth. Without it, ClickUp's folder
- * structure is the next best thing: one project per folder with active work.
+ * Projects come from Airtable's ALL Active Projects table, which is where the
+ * real client roster lives. Supabase is an optional second source for the
+ * portal, and ClickUp's folder structure is the last resort.
  */
-function clientProjects({ projectRows, workTasks, env }) {
+async function fetchProjects(env) {
+  if (env.AIRTABLE_MONEY_BASE_ID && env.AIRTABLE_PROJECTS_TABLE) {
+    const field = projectFields(env);
+    const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, env.AIRTABLE_PROJECTS_TABLE, {
+      maxRecords: 50,
+    });
+    return records.map((record) => ({ source: "airtable", fields: record.fields || {}, field }));
+  }
+  if (env.SUPABASE_URL && env.SUPABASE_PROJECTS_TABLE) {
+    const rows = await supabase.selectRows(env, env.SUPABASE_PROJECTS_TABLE, { limit: 25 });
+    return rows.map((row) => ({ source: "supabase", row }));
+  }
+  return null;
+}
+
+function projectFields(env) {
+  return {
+    name: env.AIRTABLE_PROJECT_NAME_FIELD || "Company Name",
+    status: env.AIRTABLE_PROJECT_STATUS_FIELD || "Project Status",
+    service: env.AIRTABLE_PROJECT_SERVICE_FIELD || "Service",
+    implementation: env.AIRTABLE_PROJECT_IMPLEMENTATION_FIELD || "5️⃣ Implementation",
+    supportEnd: env.AIRTABLE_PROJECT_SUPPORT_END_FIELD || "Support End",
+    ongoingValue: env.AIRTABLE_PROJECT_ONGOING_VALUE || "Ongoing Support",
+  };
+}
+
+function clientProjects({ projectRows, workTasks, env, today }) {
   if (projectRows?.length) {
-    const map = fieldMap(env);
-    return projectRows.slice(0, 5).map((row) => ({
-      name: String(row[map.name] ?? "Untitled"),
-      phase: String(row[map.phase] ?? ""),
-      status: normalizeStatus(row[map.status]),
-      note: String(row[map.note] ?? "").slice(0, 60),
-    }));
+    return projectRows
+      .slice(0, 5)
+      .map((entry) =>
+        entry.source === "airtable" ? airtableProject(entry, today) : supabaseProject(entry.row, env),
+      );
   }
 
   const byFolder = new Map();
@@ -123,12 +141,52 @@ function clientProjects({ projectRows, workTasks, env }) {
     }));
 }
 
-function fieldMap(env) {
+/**
+ * The pill states are derived from dates rather than from Project Status,
+ * which only ever says where a project is, never whether it is in trouble:
+ * an implementation date that has passed while the project is still being
+ * built needs attention, and a project past its support end date is done and
+ * should be closed out.
+ */
+export function projectHealth({ status, implementation, supportEnd, today, ongoingValue }) {
+  const ongoing = status.toLowerCase().includes(ongoingValue.toLowerCase());
+  if (supportEnd && supportEnd < today && !ongoing) return "stalled";
+  if (implementation && implementation < today && !ongoing) return "needs_attention";
+  return "on_track";
+}
+
+function airtableProject({ fields, field }, today) {
+  const status = airtable.toText(fields[field.status]);
+  const service = airtable.toText(fields[field.service]);
+  const implementation = String(fields[field.implementation] || "").slice(0, 10);
+  const supportEnd = String(fields[field.supportEnd] || "").slice(0, 10);
   return {
+    name: airtable.toText(fields[field.name]) || "Unnamed",
+    phase: service,
+    status: projectHealth({
+      status,
+      implementation,
+      supportEnd,
+      today,
+      ongoingValue: field.ongoingValue,
+    }),
+    // Emoji in the Airtable status would collide with the card's own pill.
+    note: status.replace(/[^\x00-\x7F]/g, "").trim(),
+  };
+}
+
+function supabaseProject(row, env) {
+  const map = {
     name: env.SUPABASE_PROJECT_NAME_FIELD || "name",
     phase: env.SUPABASE_PROJECT_PHASE_FIELD || "phase",
     status: env.SUPABASE_PROJECT_STATUS_FIELD || "status",
     note: env.SUPABASE_PROJECT_NOTE_FIELD || "note",
+  };
+  return {
+    name: String(row[map.name] ?? "Untitled"),
+    phase: String(row[map.phase] ?? ""),
+    status: normalizeStatus(row[map.status]),
+    note: String(row[map.note] ?? "").slice(0, 60),
   };
 }
 
