@@ -8,7 +8,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { json, badRequest, requireVar } from "../lib/http.js";
 import { chatSystemPrompt } from "../chat/prompt.js";
-import { TOOL_DEFINITIONS, runTool } from "../chat/tools.js";
+import { toolDefinitions, runTool } from "../chat/tools.js";
 
 const MODEL = "claude-opus-5";
 const MAX_TOOL_ROUNDS = 6;
@@ -26,6 +26,7 @@ export async function handleChat(request, env) {
     .map((message) => ({ role: message.role, content: message.content }));
 
   const system = chatSystemPrompt(env, new Date().toISOString());
+  const tools = toolDefinitions(env);
   const toolsUsed = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
@@ -34,7 +35,7 @@ export async function handleChat(request, env) {
       max_tokens: 4096,
       system,
       messages,
-      tools: TOOL_DEFINITIONS,
+      tools,
       output_config: { effort: env.CHAT_EFFORT || "medium" },
     });
 

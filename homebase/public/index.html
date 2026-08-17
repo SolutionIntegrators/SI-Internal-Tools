@@ -150,7 +150,11 @@
   }
   @media (max-width: 640px) {
     .section-grid, .section-grid.cols-3 { grid-template-columns: 1fr; }
-    .vitals-row { flex-direction: column; }
+    /* Two up rather than stacked: a full-width card per number pushed the
+       actual content most of a screen down. */
+    .vitals-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+    .vital { min-width: 0; padding: 14px; }
+    .vital-num { font-size: 22px; }
   }
 
   .revenue-progress-track { background: var(--linen); height: 10px; border-radius: 6px; overflow: hidden; margin: 12px 0 8px; }
@@ -336,6 +340,35 @@
     border-radius: 4px;
   }
   .gate-error { font-size: 13px; color: var(--burnt-orange); margin-top: 10px; min-height: 18px; }
+
+  /* Long client names, task titles, and pasted URLs must wrap rather than
+     push the page sideways. */
+  .row-title, .row-sub, .msg, .vital-label, #focusText { overflow-wrap: anywhere; }
+
+  @media (max-width: 900px) {
+    /* The chat panel is a full tab on mobile, so a fixed 640px box pushes the
+       composer below the fold. Size it to the space left under the header,
+       focus banner, and tabs so the input is always reachable without
+       scrolling. dvh tracks the collapsing browser chrome; vh is the fallback. */
+    .chat-panel {
+      position: static;
+      height: calc(100vh - 330px);
+      height: calc(100dvh - 330px);
+      min-height: 320px;
+    }
+    /* Below 16px, iOS zooms the whole page when a field takes focus. */
+    #chatInput, .gate-card input { font-size: 16px; }
+  }
+
+  @media (max-width: 600px) {
+    header { padding: 22px 18px 20px; }
+    header h1 { font-size: 28px; }
+    .focus-banner, .layout, .mobile-tabs { padding-left: 18px; padding-right: 18px; }
+    .layout { margin-top: 22px; gap: 18px; }
+    .focus-inner { padding: 16px 18px; }
+    #focusText { font-size: 18px; }
+    .card { padding: 16px; }
+  }
 </style>
 </head>
 <body>

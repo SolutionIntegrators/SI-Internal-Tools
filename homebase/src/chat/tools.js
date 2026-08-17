@@ -8,7 +8,7 @@ import * as airtable from "../services/airtable.js";
 import * as supabase from "../services/supabase.js";
 import { requireVar } from "../lib/http.js";
 
-export const TOOL_DEFINITIONS = [
+const ALL_TOOLS = [
   {
     name: "search_clickup",
     description:
@@ -70,6 +70,14 @@ export const TOOL_DEFINITIONS = [
   },
 ];
 
+/** Only the tools this deployment can actually serve. */
+export function toolDefinitions(env) {
+  if (String(env.CALENDAR_ENABLED).toLowerCase() === "false" || !env.GOOGLE_REFRESH_TOKEN) {
+    return ALL_TOOLS.filter((tool) => tool.name !== "search_calendar");
+  }
+  return ALL_TOOLS;
+}
+
 export async function runTool(env, name, input) {
   switch (name) {
     case "search_clickup":
@@ -92,6 +100,9 @@ async function searchClickup(env, { query }) {
 }
 
 async function searchCalendar(env, { query, start_date: startDate, end_date: endDate }) {
+  if (!env.GOOGLE_REFRESH_TOKEN) {
+    return { error: "The calendar is not connected on this deployment, so I can't see her schedule." };
+  }
   const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date();
   const end = endDate ? new Date(`${endDate}T23:59:59Z`) : new Date(start.getTime() + 14 * 86400000);
   const events = await google.listEvents(env, { timeMin: start, timeMax: end, query, maxResults: 40 });

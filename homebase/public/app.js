@@ -142,6 +142,9 @@ function render() {
   const ticketsOverdue = tickets.overdue || [];
   const dueSoonCount = (d.myTasksSoon || []).length;
   const nextCall = (d.nextCalls || [])[0];
+  // The calendar is optional. When it isn't connected its section and its
+  // vital are left out entirely rather than showing a permanent error.
+  const calendarOff = d.calendarConfigured === false;
 
   const vitals = document.createElement("div");
   vitals.className = "vitals-row";
@@ -149,7 +152,7 @@ function render() {
     <div class="vital"><div class="vital-num">${moneyDone ? percent + "%" : "—"}</div><div class="vital-label">of $${goal.toLocaleString()} weekly goal</div></div>
     <div class="vital"><div class="vital-num${ticketsOverdue.length ? " alert" : ""}">${tasksDone ? ticketsOpen : "—"}</div><div class="vital-label">tickets open${ticketsOverdue.length ? " — " + ticketsOverdue.length + " past 2 days" : ""}</div></div>
     <div class="vital"><div class="vital-num${dueSoonCount ? " alert" : ""}">${tasksDone ? dueSoonCount : "—"}</div><div class="vital-label">tasks due next 3 days</div></div>
-    <div class="vital"><div class="vital-num" style="font-size:16px;">${calDone ? (nextCall ? escapeHtml(nextCall.time) : "—") : "—"}</div><div class="vital-label">${calDone ? (nextCall ? escapeHtml(nextCall.title) : "no calls on the books") : "loading"}</div></div>
+    ${calendarOff ? "" : `<div class="vital"><div class="vital-num" style="font-size:16px;">${calDone ? (nextCall ? escapeHtml(nextCall.time) : "—") : "—"}</div><div class="vital-label">${calDone ? (nextCall ? escapeHtml(nextCall.title) : "no calls on the books") : "loading"}</div></div>`}
   `;
   grid.appendChild(vitals);
 
@@ -218,8 +221,10 @@ function render() {
   grid.appendChild(buildSection("Needs You", needsCards, "cols-3"));
 
   // Calendar
-  let calendarCards;
-  if (status.calendar === "error") {
+  let calendarCards = null;
+  if (calendarOff) {
+    calendarCards = null;
+  } else if (status.calendar === "error") {
     calendarCards = [errorCard(errors.calendar, "calendar")];
   } else if (!calDone) {
     calendarCards = [loadingCard("Loading calendar...")];
@@ -230,7 +235,7 @@ function render() {
       buildCard("This Week", d.calendarWeek, (e) => `<div class="row"><span class="row-title">${escapeHtml(e.day)}</span><div class="row-sub">${escapeHtml(e.title)}</div></div>`),
     ];
   }
-  grid.appendChild(buildSection("Calendar", calendarCards, "cols-3"));
+  if (calendarCards) grid.appendChild(buildSection("Calendar", calendarCards, "cols-3"));
 
   // Projects & Content
   const projectCards = [];

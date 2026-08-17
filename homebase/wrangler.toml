@@ -3,6 +3,11 @@ main = "src/index.js"
 compatibility_date = "2026-08-16"
 compatibility_flags = ["nodejs_compat"]
 
+# One public URL, not one per version. Everything behind /api needs the session
+# cookie either way, but there is no reason to hand out extra addresses.
+workers_dev = true
+preview_urls = false
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
@@ -44,7 +49,11 @@ CLICKUP_USER_ID = ""
 READY_FOR_REVIEW_STATUSES = "ready for review,in review,review"
 CLOSED_STATUSES = "complete,closed,done,cancelled,canceled"
 
-# --- Google Calendar ---------------------------------------------------------
+# --- Google Calendar (off) ----------------------------------------------------
+# The calendar section and its vital are left out of the dashboard, and the chat
+# panel is not given a calendar tool. To turn it on: set this to "true", run
+# `npm run google-auth`, and put the three GOOGLE_ secrets in place.
+CALENDAR_ENABLED = "false"
 GOOGLE_CALENDAR_ID = "primary"
 
 # --- Airtable: SI Money Metrics (appfVpfMqptf35xRa) ----------------------------

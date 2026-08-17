@@ -1,6 +1,6 @@
 // GET /api/dashboard/tasks — ClickUp, plus Supabase for client projects.
 import { json, softly, requireVar } from "../lib/http.js";
-import { relativeDay } from "../lib/dates.js";
+import { relativeDay, localDate } from "../lib/dates.js";
 import * as clickup from "../services/clickup.js";
 import * as supabase from "../services/supabase.js";
 import * as airtable from "../services/airtable.js";
