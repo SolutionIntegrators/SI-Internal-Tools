@@ -124,6 +124,22 @@ function buildSection(label, cards, colsClass) {
   return wrap;
 }
 
+/**
+ * A task row that can be acted on. The checkbox completes the task in ClickUp;
+ * the due date opens a native date picker, which is the one control that
+ * behaves well on both desktop and a phone without inventing a widget.
+ */
+function taskRow(task, showDue) {
+  const due = showDue && task.due ? `· due <button class="due-control" data-due-for="${escapeHtml(task.id)}" data-due-value="${escapeHtml(task.dueDate || "")}">${escapeHtml(task.due)}</button>` : "";
+  return `<div class="row editable" data-task-row="${escapeHtml(task.id)}">
+    <input type="checkbox" class="task-check" data-complete="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status || "")}" title="Mark complete">
+    <div class="row-main">
+      <span class="row-title">${escapeHtml(task.title)}</span>
+      <div class="row-sub">${escapeHtml(task.client || "")} ${due}</div>
+    </div>
+  </div>`;
+}
+
 function render() {
   const grid = $("dashboardGrid");
   grid.innerHTML = "";
@@ -205,16 +221,8 @@ function render() {
     ticketsCard.innerHTML = `<h2>Support Tickets — ${ticketsOpen} Open</h2>${ticketRows}`;
 
     needsCards = [
-      buildCard(
-        "My Tasks — Next 3 Days",
-        d.myTasksSoon,
-        (t) => `<div class="row"><span class="row-title">${escapeHtml(t.title)}</span><div class="row-sub">${escapeHtml(t.client || "")}${t.due ? " · due " + escapeHtml(t.due) : ""}</div></div>`,
-      ),
-      buildCard(
-        "Ready for Review",
-        d.readyForReview,
-        (r) => `<div class="row"><span class="row-title">${escapeHtml(r.title)}</span><div class="row-sub">${escapeHtml(r.client || "")}</div></div>`,
-      ),
+      buildCard("My Tasks — Next 3 Days", d.myTasksSoon, (t) => taskRow(t, true)),
+      buildCard("Ready for Review", d.readyForReview, (r) => taskRow(r, false)),
       ticketsCard,
     ];
   }
@@ -277,6 +285,140 @@ function render() {
     note.textContent = `Some sources didn't answer: ${warnings.join("; ")}`;
     grid.appendChild(note);
   }
+}
+
+// ---------- Editing ----------
+
+let toastTimer = null;
+
+function showToast(message, { actionLabel, onAction, error = false, ms = 8000 } = {}) {
+  document.querySelector(".toast")?.remove();
+  clearTimeout(toastTimer);
+
+  const toast = document.createElement("div");
+  toast.className = "toast" + (error ? " error" : "");
+  const text = document.createElement("span");
+  text.textContent = message;
+  toast.appendChild(text);
+
+  if (actionLabel) {
+    const button = document.createElement("button");
+    button.textContent = actionLabel;
+    button.addEventListener("click", () => {
+      toast.remove();
+      clearTimeout(toastTimer);
+      onAction();
+    });
+    toast.appendChild(button);
+  }
+
+  document.body.appendChild(toast);
+  toastTimer = setTimeout(() => toast.remove(), ms);
+}
+
+function rowFor(taskId) {
+  return document.querySelector(`[data-task-row="${CSS.escape(taskId)}"]`);
+}
+
+async function completeTask(taskId, checkbox) {
+  const row = rowFor(taskId);
+  checkbox.disabled = true;
+  row?.classList.add("saving");
+
+  try {
+    const result = await api(`/api/tasks/${encodeURIComponent(taskId)}/complete`, { method: "POST" });
+    row?.classList.remove("saving");
+    row?.classList.add("done");
+    showToast("Marked complete in ClickUp.", {
+      actionLabel: "Undo",
+      onAction: () => reopenTask(taskId, result.previousStatus),
+    });
+  } catch (err) {
+    // Put the row back the way it was — the task did not change in ClickUp.
+    checkbox.checked = false;
+    checkbox.disabled = false;
+    row?.classList.remove("saving");
+    showToast(`Couldn't complete that: ${err.message}`, { error: true });
+  }
+}
+
+async function reopenTask(taskId, previousStatus) {
+  if (!previousStatus) {
+    showToast("I don't know what status it had before, so open it in ClickUp.", { error: true });
+    return;
+  }
+  const row = rowFor(taskId);
+  row?.classList.add("saving");
+  try {
+    await api(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status: previousStatus }),
+    });
+    row?.classList.remove("saving", "done");
+    const checkbox = row?.querySelector(".task-check");
+    if (checkbox) {
+      checkbox.checked = false;
+      checkbox.disabled = false;
+    }
+    showToast(`Back to "${previousStatus}".`, { ms: 4000 });
+  } catch (err) {
+    row?.classList.remove("saving");
+    showToast(`Couldn't undo that: ${err.message}`, { error: true });
+  }
+}
+
+/** Swap the due-date label for a native date input, and save on pick. */
+function editDueDate(button) {
+  const taskId = button.dataset.dueFor;
+  const input = document.createElement("input");
+  input.type = "date";
+  input.className = "due-input";
+  input.value = button.dataset.dueValue || "";
+  button.replaceWith(input);
+  input.focus();
+  if (input.showPicker) {
+    try {
+      input.showPicker();
+    } catch {
+      /* not allowed in this context; the field is still usable */
+    }
+  }
+
+  let settled = false;
+  const restore = (label, value) => {
+    if (settled) return;
+    settled = true;
+    button.textContent = label;
+    button.dataset.dueValue = value;
+    input.replaceWith(button);
+  };
+
+  const save = async () => {
+    if (settled) return;
+    const value = input.value;
+    if (value === (button.dataset.dueValue || "")) {
+      restore(button.textContent, button.dataset.dueValue || "");
+      return;
+    }
+    settled = true;
+    input.disabled = true;
+    try {
+      await api(`/api/tasks/${encodeURIComponent(taskId)}/due`, {
+        method: "POST",
+        body: JSON.stringify({ due: value || null }),
+      });
+      settled = false;
+      restore(value || "no date", value);
+      showToast("Due date updated.", { ms: 4000 });
+    } catch (err) {
+      settled = false;
+      restore(button.textContent, button.dataset.dueValue || "");
+      showToast(`Couldn't move that date: ${err.message}`, { error: true });
+    }
+  };
+
+  input.addEventListener("change", save);
+  input.addEventListener("blur", save);
 }
 
 // ---------- Chat ----------
@@ -362,7 +504,17 @@ $("chatInput").addEventListener("keydown", (event) => {
 
 $("dashboardGrid").addEventListener("click", (event) => {
   const key = event.target.dataset?.retry;
-  if (key) loadSection(key);
+  if (key) {
+    loadSection(key);
+    return;
+  }
+  const dueButton = event.target.closest(".due-control");
+  if (dueButton) editDueDate(dueButton);
+});
+
+$("dashboardGrid").addEventListener("change", (event) => {
+  const checkbox = event.target.closest(".task-check");
+  if (checkbox && checkbox.checked) completeTask(checkbox.dataset.complete, checkbox);
 });
 
 $("gateForm").addEventListener("submit", async (event) => {

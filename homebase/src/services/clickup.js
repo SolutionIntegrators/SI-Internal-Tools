@@ -107,3 +107,24 @@ export function summarize(task) {
     url: task.url,
   };
 }
+
+// ---------- Writes ----------
+// The dashboard can complete a task and move its due date. Nothing else writes:
+// tickets, money, and content stay read-only.
+
+export async function getTask(env, taskId) {
+  return fetchJson("ClickUp", `${BASE}/task/${encodeURIComponent(taskId)}`, { headers: headers(env) });
+}
+
+/** A list's own status set. Statuses are per-list in ClickUp, not global. */
+export async function getList(env, listId) {
+  return fetchJson("ClickUp", `${BASE}/list/${encodeURIComponent(listId)}`, { headers: headers(env) });
+}
+
+export async function updateTask(env, taskId, body) {
+  return fetchJson("ClickUp", `${BASE}/task/${encodeURIComponent(taskId)}`, {
+    method: "PUT",
+    headers: { ...headers(env), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}

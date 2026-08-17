@@ -191,6 +191,29 @@ and it takes about five minutes to set up in the Zero Trust dashboard. Worth
 switching to whenever it's convenient; the cookie gate can stay as-is
 underneath, or come out entirely once Access is enforcing.
 
+## Editing
+
+Two write actions, both ClickUp only:
+
+- **Check off a task** in My Tasks or Ready for Review and it completes in
+  ClickUp. The done status is read from that list rather than assumed, since
+  ClickUp defines statuses per list — one board's "complete" is another's
+  "shipped". An undo appears for 8 seconds and puts the previous status back.
+- **Tap a due date** to open a native date picker and move it. Picking nothing
+  and clearing the field removes the date.
+
+Everything else stays read-only on purpose. Support tickets are client-facing,
+and Airtable holds money — a stray tap on a phone should not be able to close a
+client's ticket or mark an invoice paid. That also means **the Airtable token
+only ever needs read scope.**
+
+If a write fails, the row reverts to exactly how it looked and the error names
+the service. A checkbox never stays ticked for something ClickUp rejected.
+
+The write endpoints sit behind the same session cookie as everything else under
+`/api`, and task ids are validated against `[A-Za-z0-9_-]{1,40}` before they are
+put in a URL.
+
 ## Chat panel
 
 Four read-only tools, backed by Worker functions: `search_clickup`,

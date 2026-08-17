@@ -17,6 +17,7 @@ import { handleTasks, cachedTasks } from "./routes/tasks.js";
 import { handleCalendar, cachedCalendar } from "./routes/calendar.js";
 import { handleMoney, cachedMoney } from "./routes/money.js";
 import { handleChat } from "./routes/chat.js";
+import { handleComplete, handleSetStatus, handleSetDue } from "./routes/taskEdits.js";
 
 const CACHED = {
   tasks: cachedTasks,
@@ -78,6 +79,14 @@ async function route(request, env, ctx, url) {
 
   if (url.pathname === "/api/chat" && request.method === "POST") {
     return handleChat(request, env);
+  }
+
+  const edit = url.pathname.match(/^\/api\/tasks\/([^/]+)\/(complete|status|due)$/);
+  if (edit && request.method === "POST") {
+    const [, taskId, action] = edit;
+    if (action === "complete") return handleComplete(env, decodeURIComponent(taskId));
+    if (action === "status") return handleSetStatus(request, env, decodeURIComponent(taskId));
+    return handleSetDue(request, env, decodeURIComponent(taskId));
   }
 
   return json({ error: "Not found" }, { status: 404 });

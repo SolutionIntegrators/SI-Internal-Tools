@@ -65,14 +65,22 @@ export async function handleTasks(env, ctx) {
   const tickets = selectTickets(ticketTasks, { now, env });
 
   const payload = {
+    // id and status ride along so the page can complete or reschedule a task,
+    // and dueDate is the raw value the date control needs.
     myTasksSoon: selectDueSoon(workTasks, { userId: assigneeId, now, env }).map((task) => ({
+      id: task.id,
       title: task.name,
       client: clickup.clientOf(task),
       due: relativeDay(new Date(clickup.dueMs(task)), now, tz),
+      dueDate: localDate(new Date(clickup.dueMs(task)), tz),
+      status: task.status?.status || null,
     })),
     readyForReview: selectReadyForReview(workTasks, { env }).map((task) => ({
+      id: task.id,
       title: task.name,
       client: clickup.clientOf(task),
+      dueDate: clickup.dueMs(task) ? localDate(new Date(clickup.dueMs(task)), tz) : "",
+      status: task.status?.status || null,
     })),
     supportTickets: {
       openCount: tickets.openCount,
