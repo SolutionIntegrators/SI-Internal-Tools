@@ -13,7 +13,7 @@ import {
 } from "../src/lib/filters.js";
 import { billsDueSoon } from "../src/routes/money.js";
 import { projectHealth } from "../src/routes/tasks.js";
-import { startOfWeek, localDate, relativeDay, addDays } from "../src/lib/dates.js";
+import { startOfWeek, endOfWeek, localDate, relativeDay, addDays } from "../src/lib/dates.js";
 
 const TZ = "America/New_York";
 const NOW = Date.parse("2026-08-19T16:00:00Z"); // Wednesday, noon ET
@@ -135,10 +135,40 @@ test("calendar splits into next calls, rest of today, and the week ahead", () =>
   assert.deepEqual(calendarWeek.map((e) => e.summary), ["2026-08-21T15:00:00Z"]);
 });
 
-test("week starts on Monday, including when today is Monday or Sunday", () => {
-  assert.equal(startOfWeek(new Date("2026-08-19T16:00:00Z"), TZ), "2026-08-17"); // Wed
-  assert.equal(startOfWeek(new Date("2026-08-17T16:00:00Z"), TZ), "2026-08-17"); // Mon
-  assert.equal(startOfWeek(new Date("2026-08-23T16:00:00Z"), TZ), "2026-08-17"); // Sun
+test("the week runs Sunday through Saturday, at both ends", () => {
+  assert.equal(startOfWeek(new Date("2026-08-19T16:00:00Z"), TZ), "2026-08-16"); // Wed
+  assert.equal(startOfWeek(new Date("2026-08-16T16:00:00Z"), TZ), "2026-08-16"); // Sun
+  assert.equal(startOfWeek(new Date("2026-08-22T16:00:00Z"), TZ), "2026-08-16"); // Sat
+  // The Sunday before rolls back a full week rather than landing on itself.
+  assert.equal(startOfWeek(new Date("2026-08-15T16:00:00Z"), TZ), "2026-08-09"); // Sat prior
+  assert.equal(endOfWeek(new Date("2026-08-19T16:00:00Z"), TZ), "2026-08-22");
+  assert.equal(endOfWeek(new Date("2026-08-16T16:00:00Z"), TZ), "2026-08-22");
+});
+
+test("a Sunday week still contains the Monday-dated revenue goal row", () => {
+  // Weekly Revenue Goals rows are all Mondays. Matching the week they fall in
+  // keeps them found; an exact match on the Sunday start would find nothing
+  // and fall back to REVENUE_GOAL every week without saying so.
+  const mondays = ["2026-08-17", "2026-08-24", "2026-08-31"];
+  for (const monday of mondays) {
+    // Any day of that Monday's week must bracket it.
+    for (const offset of [0, 1, 5]) {
+      const day = new Date(`${addDays(monday, offset)}T16:00:00Z`);
+      const start = startOfWeek(day, TZ);
+      const end = endOfWeek(day, TZ);
+      assert.ok(monday >= start && monday <= end, `${monday} missing from ${start}..${end}`);
+    }
+  }
+});
+
+test("late Saturday night in Chicago is still the same week, not the next one", () => {
+  // The rest of this file runs in ET; the business runs on CST, and the whole
+  // point of startOfWeek is that the answer follows the configured zone.
+  // 04:00Z is Saturday 11pm in Chicago but already Sunday in UTC and in ET.
+  const CT = "America/Chicago";
+  assert.equal(startOfWeek(new Date("2026-08-23T04:00:00Z"), CT), "2026-08-16");
+  assert.equal(startOfWeek(new Date("2026-08-23T04:00:00Z"), TZ), "2026-08-23");
+  assert.equal(startOfWeek(new Date("2026-08-23T06:00:00Z"), CT), "2026-08-23");
 });
 
 test("due labels read the way a person would say them", () => {

@@ -18,6 +18,12 @@ import { handleCalendar, cachedCalendar } from "./routes/calendar.js";
 import { handleMoney, cachedMoney } from "./routes/money.js";
 import { handleChat } from "./routes/chat.js";
 import { handleComplete, handleSetStatus, handleSetDue } from "./routes/taskEdits.js";
+import {
+  handleInvoiceStatus,
+  handleInvoiceDue,
+  handleBillPaid,
+  handleBillPaidThrough,
+} from "./routes/moneyEdits.js";
 
 const CACHED = {
   tasks: cachedTasks,
@@ -87,6 +93,20 @@ async function route(request, env, ctx, url) {
     if (action === "complete") return handleComplete(env, decodeURIComponent(taskId));
     if (action === "status") return handleSetStatus(request, env, decodeURIComponent(taskId));
     return handleSetDue(request, env, decodeURIComponent(taskId));
+  }
+
+  const invoice = url.pathname.match(/^\/api\/money\/invoices\/([^/]+)\/(status|due)$/);
+  if (invoice && request.method === "POST") {
+    const [, recordId, action] = invoice;
+    const id = decodeURIComponent(recordId);
+    return action === "status" ? handleInvoiceStatus(request, env, id) : handleInvoiceDue(request, env, id);
+  }
+
+  const bill = url.pathname.match(/^\/api\/money\/bills\/([^/]+)\/(paid|paid-through)$/);
+  if (bill && request.method === "POST") {
+    const [, recordId, action] = bill;
+    const id = decodeURIComponent(recordId);
+    return action === "paid" ? handleBillPaid(request, env, id) : handleBillPaidThrough(request, env, id);
   }
 
   return json({ error: "Not found" }, { status: 404 });

@@ -67,3 +67,27 @@ export function toText(value) {
   if (typeof value === "object") return value.name || value.value || "";
   return String(value);
 }
+
+/** One record by id. Used before a write so an undo has the prior value. */
+export async function getRecord(env, baseId, table, recordId) {
+  if (!baseId) throw new ConfigError("Airtable base id is not set");
+  if (!table) throw new ConfigError("Airtable table name is not set");
+  const url = `${BASE}/${baseId}/${encodeURIComponent(table)}/${recordId}`;
+  return fetchJson("Airtable", url, { headers: headers(env) });
+}
+
+/**
+ * Patch named fields on one record, leaving every other field alone. Requires
+ * the token to carry the data.records:write scope — with a read-only token
+ * Airtable answers 403 and that surfaces as an "Airtable said no" toast.
+ */
+export async function updateRecord(env, baseId, table, recordId, fields) {
+  if (!baseId) throw new ConfigError("Airtable base id is not set");
+  if (!table) throw new ConfigError("Airtable table name is not set");
+  const url = `${BASE}/${baseId}/${encodeURIComponent(table)}/${recordId}`;
+  return fetchJson("Airtable", url, {
+    method: "PATCH",
+    headers: { ...headers(env), "content-type": "application/json" },
+    body: JSON.stringify({ fields }),
+  });
+}

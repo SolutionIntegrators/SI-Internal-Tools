@@ -33,13 +33,17 @@ have tests:
 | Ready for Review | any ready-for-review status, due date ignored |
 | Support Tickets | every open ticket counted; flagged once open longer than 2 days |
 | Upcoming Bills | recurrence rules expanded across the next 7 days |
-| Revenue | income dated Monday through today, excluding rows marked Unpaid |
-| Revenue goal | read live from the Weekly Revenue Goals table |
+| Revenue | income dated Sunday through today, excluding rows marked Unpaid |
+| Revenue goal | the Weekly Revenue Goals row falling inside this Sun-Sat week |
 | Client Projects | the Airtable roster, with health derived from its dates |
 | Revenue note | a conditional on how far off the goal is — no model call |
 
 Everything is scoped to the `TIMEZONE` var (`America/Chicago`) rather than UTC,
-so "today" means Ashley's today no matter where the page is open.
+so "today" means Ashley's today no matter where the page is open. **The week
+runs Sunday through Saturday.** The goal row is matched on falling *inside* that
+week rather than on its exact start date, because the Weekly Revenue Goals rows
+are all dated Mondays — an exact match against Sunday would find nothing and
+quietly fall back to the `REVENUE_GOAL` default every week.
 
 ### Two rules worth knowing about
 
@@ -193,7 +197,9 @@ underneath, or come out entirely once Access is enforcing.
 
 ## Editing
 
-Two write actions, both ClickUp only:
+Tasks are one tap. Money asks twice.
+
+**ClickUp — no confirmation:**
 
 - **Check off a task** in My Tasks or Ready for Review and it completes in
   ClickUp. The done status is read from that list rather than assumed, since
@@ -202,17 +208,42 @@ Two write actions, both ClickUp only:
 - **Tap a due date** to open a native date picker and move it. Picking nothing
   and clearing the field removes the date.
 
-Everything else stays read-only on purpose. Support tickets are client-facing,
-and Airtable holds money — a stray tap on a phone should not be able to close a
-client's ticket or mark an invoice paid. That also means **the Airtable token
-only ever needs read scope.**
+**Airtable money — behind a confirm dialog**, because these are the expensive
+taps to get wrong:
+
+- **Check off an upcoming payment** to set that invoice's Status to `Paid`.
+  Only `Paid`, `In progress`, and `Overdue` can be set from here —
+  `Project Cancelled` and `Delete` stay in Airtable, where there is context
+  around them.
+- **Tap an expected date** to move the invoice's Due Date.
+- **Check off a bill** to record it as paid.
+
+Support tickets and the content pipeline stay read-only. A stray tap on a phone
+should not close a client's ticket.
+
+### Marking a bill paid
+
+Recurring Items are recurrence *rules*, not one row per payment, so there is no
+row to tick. Home Base writes a **`Paid Through`** date onto the rule instead,
+and hides occurrences on or before it. Next month's copy of the bill still
+arrives on schedule — unlike unchecking `Active`, which would kill every future
+occurrence.
+
+The mark only ever moves forward, so checking off a later bill cannot un-pay an
+earlier one. If `AIRTABLE_BILLS_PAID_THROUGH_FIELD` is unset the bills card
+renders read-only rather than showing a button that always fails.
+
+### Failure and scope
 
 If a write fails, the row reverts to exactly how it looked and the error names
-the service. A checkbox never stays ticked for something ClickUp rejected.
+the service. A checkbox never stays ticked for something the upstream rejected.
 
 The write endpoints sit behind the same session cookie as everything else under
-`/api`, and task ids are validated against `[A-Za-z0-9_-]{1,40}` before they are
-put in a URL.
+`/api`. ClickUp task ids are validated against `[A-Za-z0-9_-]{1,40}` and
+Airtable record ids against `rec[A-Za-z0-9]{14}` before they are put in a URL.
+
+**The Airtable token now needs `data.records:write`** on the SI Money Metrics
+and 99 Problems bases. It was read-only until the money cards became editable.
 
 ## Chat panel
 

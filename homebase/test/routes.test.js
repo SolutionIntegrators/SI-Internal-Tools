@@ -25,6 +25,7 @@ const env = {
   AIRTABLE_PROJECTS_TABLE: "ALL Active Projects",
   AIRTABLE_BILLS_BASE_ID: "appQeUH0Lb6i3lxTL",
   AIRTABLE_BILLS_TABLE: "Recurring Items",
+  AIRTABLE_BILLS_PAID_THROUGH_FIELD: "Paid Through",
   AIRTABLE_GOALS_TABLE: "Weekly Revenue Goals",
   AIRTABLE_CONTENT_BASE_ID: "appzyaY40KNIy3n4t",
   AIRTABLE_CONTENT_TABLE: "Social Media Management",

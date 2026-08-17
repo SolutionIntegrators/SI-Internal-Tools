@@ -6,11 +6,12 @@
 //                             Weekly Revenue Goals (this week's target)
 //   SI Content Hub            Social Media Management (the content pipeline)
 import { json, softly } from "../lib/http.js";
-import { localDate, startOfWeek, addDays } from "../lib/dates.js";
+import { localDate, startOfWeek, endOfWeek, addDays } from "../lib/dates.js";
 import * as airtable from "../services/airtable.js";
 import { occurrencesInWindow } from "../lib/recurrence.js";
 import { revenueNote, contentStage } from "../lib/filters.js";
 import { readSnapshot, writeSnapshot } from "../lib/cache.js";
+import { isSettled } from "../lib/moneyEdits.js";
 
 // Invoices in these states are settled or abandoned — neither is money coming in.
 const CLOSED_INVOICE_STATUSES = ["paid", "project cancelled", "delete"];
@@ -19,12 +20,13 @@ export async function handleMoney(env, ctx) {
   const tz = env.TIMEZONE;
   const now = new Date();
   const today = localDate(now, tz);
-  const weekStart = startOfWeek(now, tz);
+  const weekStart = startOfWeek(now, tz); // Sunday
+  const weekEnd = endOfWeek(now, tz); // Saturday
   const warnings = [];
 
   const [collected, weeklyGoal, invoices, recurring, content] = await Promise.all([
     softly(warnings, "Revenue", fetchCollected(env, weekStart, today), []),
-    softly(warnings, "Weekly goal", fetchWeeklyGoal(env, weekStart), null),
+    softly(warnings, "Weekly goal", fetchWeeklyGoal(env, weekStart, weekEnd), null),
     softly(warnings, "Upcoming payments", fetchOpenInvoices(env, today), []),
     softly(warnings, "Bills", fetchRecurringExpenses(env), []),
     softly(warnings, "Content", fetchContent(env), []),
@@ -40,14 +42,21 @@ export async function handleMoney(env, ctx) {
   const payload = {
     revenue: { goal, current: Math.round(current), note: revenueNote(current, goal) },
     upcomingPayments: invoices.slice(0, 5).map((record) => ({
+      id: record.id,
       client: clientFromSummary(airtable.toText(record.fields?.[field.invoiceSummary])),
       amount: airtable.formatMoney(
         airtable.toAmount(record.fields?.[field.invoiceAmount]) ||
           airtable.toAmount(record.fields?.[field.invoiceTotal]),
       ),
       expected: String(record.fields?.[field.invoiceDue] || "").slice(0, 10),
+      status: airtable.toText(record.fields?.[field.invoiceStatus]),
     })),
     upcomingBills: billsDueSoon(recurring, { env, today }),
+    // The bills card only offers a paid checkbox when there is a column to
+    // record it in, so a missing field degrades to read-only rather than to a
+    // button that always fails.
+    billsWritable: Boolean(env.AIRTABLE_BILLS_PAID_THROUGH_FIELD),
+    week: { start: weekStart, end: weekEnd },
     contentPipeline: content.slice(0, 5).map((record) => ({
       title: airtable.toText(record.fields?.[field.contentTitle]) || "Untitled",
       stage: contentStage(airtable.toText(record.fields?.[field.contentStatus])),
@@ -103,14 +112,17 @@ async function fetchCollected(env, weekStart, today) {
 
 /**
  * The weekly target lives in Airtable, so changing it there changes the
- * dashboard. Falls back to the REVENUE_GOAL var when this week has no row yet.
+ * dashboard. Matched on the goal row falling anywhere inside this Sun-Sat week
+ * rather than on the exact start date: the Weekly Revenue Goals rows are all
+ * dated Mondays, and an exact match against Sunday would find nothing and
+ * silently fall back to REVENUE_GOAL every single week.
  */
-async function fetchWeeklyGoal(env, weekStart) {
+async function fetchWeeklyGoal(env, weekStart, weekEnd) {
   if (!env.AIRTABLE_BILLS_BASE_ID || !env.AIRTABLE_GOALS_TABLE) return null;
   const weekField = env.AIRTABLE_GOALS_WEEK_FIELD || "Week Start Date";
   const goalField = env.AIRTABLE_GOALS_AMOUNT_FIELD || "Goal Amount";
   const records = await airtable.listRecords(env, env.AIRTABLE_BILLS_BASE_ID, env.AIRTABLE_GOALS_TABLE, {
-    filterByFormula: `DATESTR({${weekField}}) = ${airtable.quote(weekStart)}`,
+    filterByFormula: airtable.dateRangeFormula(weekField, weekStart, weekEnd),
     maxRecords: 1,
   });
   const amount = airtable.toAmount(records[0]?.fields?.[goalField]);
@@ -156,6 +168,7 @@ async function fetchContent(env) {
  */
 export function billsDueSoon(records, { env, today, limit = 5 }) {
   const horizon = addDays(today, 7);
+  const paidField = env.AIRTABLE_BILLS_PAID_THROUGH_FIELD || "";
   const books = (env.AIRTABLE_BILLS_BOOKS || "")
     .split(",")
     .map((book) => book.trim().toLowerCase())
@@ -188,12 +201,19 @@ export function billsDueSoon(records, { env, today, limit = 5 }) {
       horizon,
     );
 
+    // Occurrences up to the Paid Through mark are already settled. The rule
+    // keeps running, so next month's copy of the bill still appears.
+    const paidThrough = paidField ? String(f[paidField] || "").slice(0, 10) : "";
+
     for (const date of dates) {
+      if (isSettled(date, paidThrough)) continue;
       due.push({
+        id: record.id,
         name: airtable.toText(f[nameField]) || "Unnamed",
         amount: airtable.formatMoney(airtable.toAmount(f[amountField])),
         due: date,
         book,
+        paidThrough: paidThrough || null,
       });
     }
   }

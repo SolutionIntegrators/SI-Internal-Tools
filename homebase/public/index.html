@@ -295,10 +295,11 @@
   }
   .tab-btn.active { background: var(--denim-blue); color: var(--white); }
 
-  /* Editable task rows */
+  /* Editable task and money rows */
   .row.editable { display: flex; align-items: flex-start; gap: 10px; }
   .row-main { flex: 1; min-width: 0; }
-  .task-check {
+  .task-check,
+  .money-check {
     appearance: none;
     flex: none;
     width: 20px;
@@ -310,13 +311,16 @@
     cursor: pointer;
     transition: background 0.12s, border-color 0.12s;
   }
-  .task-check:hover { border-color: var(--burnt-orange); }
-  .task-check:checked {
+  .task-check:hover,
+  .money-check:hover { border-color: var(--burnt-orange); }
+  .task-check:checked,
+  .money-check:checked {
     background: var(--burnt-orange) no-repeat center / 12px 12px;
     border-color: var(--burnt-orange);
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3 8.5l3.5 3.5L13 5'/></svg>");
   }
-  .task-check:disabled { opacity: 0.45; cursor: default; }
+  .task-check:disabled,
+  .money-check:disabled { opacity: 0.45; cursor: default; }
   .row.saving { opacity: 0.5; }
   .row.done .row-title { text-decoration: line-through; color: #999; }
   .due-control {
@@ -338,6 +342,49 @@
     border: 1px solid var(--burnt-orange);
     border-radius: 4px;
     outline: none;
+  }
+
+  /* Money actions ask twice. Tasks do not. */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(31, 30, 28, 0.45);
+  }
+  .confirm-box {
+    background: var(--white);
+    border-radius: 10px;
+    padding: 22px 22px 18px;
+    max-width: 380px;
+    width: 100%;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  }
+  .confirm-text {
+    margin: 0 0 18px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--charcoal);
+  }
+  .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .confirm-actions button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 9px 16px;
+    border-radius: 6px;
+    border: 1px solid #d8cfc4;
+    background: var(--white);
+    color: var(--charcoal);
+    cursor: pointer;
+  }
+  .confirm-ok {
+    background: var(--burnt-orange);
+    border-color: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
   }
 
   .toast {
@@ -431,7 +478,9 @@
       min-height: 320px;
     }
     /* Below 16px, iOS zooms the whole page when a field takes focus. */
-    #chatInput, .gate-card input { font-size: 16px; }
+    #chatInput, .gate-card input, .due-input { font-size: 16px; }
+    /* Confirm is the last thing between a tap and a write, so give it room. */
+    .confirm-actions button { padding: 12px 18px; font-size: 15px; }
   }
 
   @media (max-width: 600px) {

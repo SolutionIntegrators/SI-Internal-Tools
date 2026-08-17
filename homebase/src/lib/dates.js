@@ -28,12 +28,18 @@ export function localDate(date, tz) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-const WEEKDAY_INDEX = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+// The week runs Sunday through Saturday, so Sunday is offset 0.
+const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-/** ISO date of the Monday on or before `date`, in `tz`. */
+/** ISO date of the Sunday on or before `date`, in `tz`. */
 export function startOfWeek(date, tz) {
   const offset = WEEKDAY_INDEX[zonedParts(date, tz).weekday];
   return addDays(localDate(date, tz), -offset);
+}
+
+/** ISO date of the Saturday on or after `date`, in `tz`. */
+export function endOfWeek(date, tz) {
+  return addDays(startOfWeek(date, tz), 6);
 }
 
 /** Shift an ISO date string by whole days. Calendar math only, no timezone. */

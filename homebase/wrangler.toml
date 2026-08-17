@@ -85,6 +85,7 @@ AIRTABLE_PROJECT_ONGOING_VALUE = "Ongoing Support"
 # Bills are recurrence rules, not dated rows — src/lib/recurrence.js expands them.
 AIRTABLE_BILLS_BASE_ID = "appQeUH0Lb6i3lxTL"
 AIRTABLE_BILLS_TABLE = "Recurring Items"
+AIRTABLE_BILLS_PAID_THROUGH_FIELD = "Paid Through"
 AIRTABLE_BILLS_NAME_FIELD = "Name"
 AIRTABLE_BILLS_AMOUNT_FIELD = "Amount"
 AIRTABLE_BILLS_TYPE_FIELD = "Type"
