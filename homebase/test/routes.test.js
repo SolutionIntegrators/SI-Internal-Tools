@@ -9,7 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { handleTasks } from "../src/routes/tasks.js";
-import { handleCalendar } from "../src/routes/calendar.js";
+import { handleCalendar, calendarConfigured } from "../src/routes/calendar.js";
 import { handleMoney } from "../src/routes/money.js";
 
 // Mirrors the non-secret vars in wrangler.toml. Without the base ids the
@@ -72,4 +72,35 @@ test("CALENDAR_ENABLED=false wins even if Google credentials are present", async
   };
   const body = await (await handleCalendar(withGoogle, ctx)).json();
   assert.equal(body.calendarConfigured, false);
+});
+
+test("turning the flag on without the Google secrets hides the calendar, not breaks it", async () => {
+  // wrangler.toml now ships CALENDAR_ENABLED = "true", so this is the state a
+  // deploy lands in before the secrets are set. It must stay silent rather
+  // than render a permanent error card.
+  for (const missing of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]) {
+    const partial = {
+      ...env,
+      CALENDAR_ENABLED: "true",
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REFRESH_TOKEN: "token",
+    };
+    delete partial[missing];
+    const body = await (await handleCalendar(partial, ctx)).json();
+    assert.equal(body.calendarConfigured, false, `${missing} missing should hide the calendar`);
+    assert.deepEqual(body.warnings, [], `${missing} missing should not warn`);
+  }
+});
+
+test("the flag plus all three secrets is what actually turns the calendar on", () => {
+  assert.equal(
+    calendarConfigured({
+      CALENDAR_ENABLED: "true",
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REFRESH_TOKEN: "token",
+    }),
+    true,
+  );
 });

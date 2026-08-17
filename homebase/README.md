@@ -90,15 +90,16 @@ and Repeat Client Project Requests, so if those should count as tickets, clear
 `CLICKUP_SUPPORT_LIST_IDS` and set `CLICKUP_SUPPORT_FOLDER_IDS = "39953826"`
 instead.
 
-**Google Calendar — currently off.** `CALENDAR_ENABLED = "false"` in
-`wrangler.toml`, so the Calendar section and its vital are left out of the
-dashboard, and the chat panel is not given a calendar tool or told it has one.
-Nothing errors and nothing is missing; the dashboard is simply a three-source
-dashboard.
+**Google Calendar — on.** `CALENDAR_ENABLED = "true"` in `wrangler.toml`.
 
-To switch it on later, no code changes are needed: set `CALENDAR_ENABLED` to
-`"true"`, then set up Google. It is the only service that genuinely needs
-OAuth. In Google
+The flag is only half the switch. `calendarConfigured()` also requires all three
+`GOOGLE_` secrets, and if any is missing the Calendar section and its vital are
+left out of the dashboard entirely and the chat panel is not given a calendar
+tool or told it has one. Nothing errors and nothing is half-rendered — it
+degrades to a three-source dashboard. So the flag is safe to ship ahead of the
+secrets, and there are tests holding that behaviour in place.
+
+Google is the only service here that genuinely needs OAuth. In Google
 Cloud Console: create a project, enable the Calendar API, create an OAuth client
 of type *Web application*, and add `http://localhost:8976` as an authorized
 redirect URI. Then run the helper once on your own machine:

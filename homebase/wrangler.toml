@@ -49,11 +49,12 @@ CLICKUP_USER_ID = ""
 READY_FOR_REVIEW_STATUSES = "ready for review,in review,review"
 CLOSED_STATUSES = "complete,closed,done,cancelled,canceled"
 
-# --- Google Calendar (off) ----------------------------------------------------
-# The calendar section and its vital are left out of the dashboard, and the chat
-# panel is not given a calendar tool. To turn it on: set this to "true", run
-# `npm run google-auth`, and put the three GOOGLE_ secrets in place.
-CALENDAR_ENABLED = "false"
+# --- Google Calendar (on) -----------------------------------------------------
+# This flag is only half the switch: the section also needs all three GOOGLE_
+# secrets. Missing any of them leaves the calendar out of the dashboard entirely
+# rather than showing a broken card, so "true" here is safe on its own.
+# Set the secrets with `npm run google-auth` then `wrangler secret put`.
+CALENDAR_ENABLED = "true"
 GOOGLE_CALENDAR_ID = "primary"
 
 # --- Airtable: SI Money Metrics (appfVpfMqptf35xRa) ----------------------------
