@@ -19,32 +19,42 @@ function idList(value) {
     .filter(Boolean);
 }
 
+/** Folder ids and list ids, as ClickUp's team task endpoint wants them. */
+function scopeParams(folderIds, listIds) {
+  const folders = idList(folderIds);
+  const lists = idList(listIds);
+  const params = {};
+  if (folders.length) params["project_ids[]"] = folders;
+  if (lists.length) params["list_ids[]"] = lists;
+  return params;
+}
+
 export async function handleTasks(env, ctx) {
   const tz = env.TIMEZONE;
   const now = Date.now();
   const warnings = [];
 
   const teamId = requireVar(env, "CLICKUP_TEAM_ID");
-  const supportListIds = idList(env.CLICKUP_SUPPORT_LIST_IDS);
-  const workListIds = idList(env.CLICKUP_WORK_LIST_IDS);
+  // Scope is set by folder where possible: Client Projects gains a list per
+  // engagement, so a list-id allowlist would drop every new client until
+  // someone remembered to edit the config. ClickUp calls folder ids
+  // "project_ids" on the team task endpoint.
+  const workScope = scopeParams(env.CLICKUP_WORK_FOLDER_IDS, env.CLICKUP_WORK_LIST_IDS);
+  const supportScope = scopeParams(env.CLICKUP_SUPPORT_FOLDER_IDS, env.CLICKUP_SUPPORT_LIST_IDS);
 
   const [user, workTasks, ticketTasks, projectRows] = await Promise.all([
     softly(warnings, "ClickUp user", clickup.currentUser(env), null),
     softly(
       warnings,
       "ClickUp tasks",
-      clickup.teamTasks(env, teamId, {
-        include_closed: false,
-        subtasks: true,
-        "list_ids[]": workListIds.length ? workListIds : undefined,
-      }),
+      clickup.teamTasks(env, teamId, { include_closed: false, subtasks: true, ...workScope }),
       [],
     ),
-    supportListIds.length
+    Object.keys(supportScope).length
       ? softly(
           warnings,
           "ClickUp tickets",
-          clickup.teamTasks(env, teamId, { include_closed: false, "list_ids[]": supportListIds }),
+          clickup.teamTasks(env, teamId, { include_closed: false, ...supportScope }),
           [],
         )
       : Promise.resolve([]),

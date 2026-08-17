@@ -70,10 +70,21 @@ click through account settings.
 **Anthropic** — API key from console.anthropic.com. Used only by the chat panel.
 
 **ClickUp** — Settings → Apps → API Token. No OAuth app needed for a single
-internal user. You also need the team id and the list ids for work and for
-support tickets; `npx wrangler dev` plus a browser hitting
-`https://api.clickup.com/api/v2/team` with the token will show you the team id,
-and the list ids come from the ClickUp URL of each list.
+internal user. That is the only thing to gather; the ids are already filled in:
+
+| Var | Value | What it is |
+| --- | --- | --- |
+| `CLICKUP_TEAM_ID` | `8619174` | the workspace |
+| `CLICKUP_WORK_FOLDER_IDS` | `90147460136,44205760` | Client Projects, Ops Management |
+| `CLICKUP_SUPPORT_LIST_IDS` | `900601724895` | Client Support Requests |
+
+Work is scoped by **folder**, not by list, on purpose. Client Projects holds one
+list per engagement and gains a new one with every client, so a list allowlist
+would quietly drop each new client until someone edited the config. Support
+points at the one ticket list; the Support folder also holds The Goodies Shop
+and Repeat Client Project Requests, so if those should count as tickets, clear
+`CLICKUP_SUPPORT_LIST_IDS` and set `CLICKUP_SUPPORT_FOLDER_IDS = "39953826"`
+instead.
 
 **Google Calendar** — the only service that genuinely needs OAuth. In Google
 Cloud Console: create a project, enable the Calendar API, create an OAuth client

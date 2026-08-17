@@ -29,10 +29,16 @@ REVENUE_GOAL = "5000"
 CHAT_EFFORT = "medium"
 
 # --- ClickUp -----------------------------------------------------------------
-CLICKUP_TEAM_ID = ""
-# Comma-separated list ids. Leave WORK empty to search the whole workspace.
+CLICKUP_TEAM_ID = "8619174"
+# Scope by folder so a new client list is picked up without a config change.
+# Client Projects (one list per engagement) + Ops Management (internal work).
+CLICKUP_WORK_FOLDER_IDS = "90147460136,44205760"
 CLICKUP_WORK_LIST_IDS = ""
-CLICKUP_SUPPORT_LIST_IDS = ""
+# Client Support Requests. The Support folder also holds The Goodies Shop and
+# Repeat Client Project Requests — add folder 39953826 here instead if those
+# should count as tickets too.
+CLICKUP_SUPPORT_LIST_IDS = "900601724895"
+CLICKUP_SUPPORT_FOLDER_IDS = ""
 # Only needed if the API token belongs to someone other than Ashley.
 CLICKUP_USER_ID = ""
 READY_FOR_REVIEW_STATUSES = "ready for review,in review,review"
