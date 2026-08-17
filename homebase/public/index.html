@@ -116,6 +116,9 @@
   }
 
   .dashboard-grid { display: block; }
+  /* An explicit `display` on an element beats the user-agent rule for [hidden],
+     so views that set one need this to stay hidden when toggled off. */
+  [hidden] { display: none !important; }
 
   .vitals-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
   .vital { flex: 1; min-width: 150px; background: var(--white); border-radius: 6px; padding: 16px 18px; box-shadow: 0 2px 10px rgba(30,30,30,0.05); }
@@ -387,6 +390,165 @@
     font-weight: 600;
   }
 
+  /* ---- Calendar view ---- */
+  .view-switch { display: flex; gap: 6px; margin-bottom: 18px; }
+  .view-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid #ded5c9;
+    background: transparent;
+    color: #7d736a;
+    cursor: pointer;
+  }
+  .view-btn.active { background: var(--denim-blue); border-color: var(--denim-blue); color: var(--white); }
+
+  .calendar-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; align-items: start; }
+  /* The month grid needs the whole page. Seven columns inside the dashboard
+     column alone leaves ~67px each, which truncates every chip to an ellipsis.
+     Mobile is already single-column and governed by the tabs, so leave it. */
+  @media (min-width: 901px) {
+    body.calendar-mode .layout { grid-template-columns: minmax(0, 1fr); }
+    body.calendar-mode #chatCol { display: none; }
+  }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
+  .cal-title { font-family: 'Fraunces', serif; font-size: 22px; color: var(--charcoal); }
+  .cal-nav { display: flex; gap: 6px; }
+  .cal-nav button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #ded5c9;
+    background: var(--white);
+    color: var(--charcoal);
+    cursor: pointer;
+  }
+  .cal-nav button:hover { border-color: var(--burnt-orange); color: var(--burnt-orange); }
+
+  .cal-grid { background: var(--white); border-radius: 10px; padding: 10px; overflow-x: auto; }
+  .cal-weekdays, .cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .cal-weekdays { margin-bottom: 4px; }
+  .cal-weekday {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #a99e93;
+    text-align: center;
+    padding: 4px 0;
+  }
+  .cal-week { margin-bottom: 4px; }
+  .cal-day {
+    min-height: 92px;
+    border: 1px solid #f0e9e0;
+    border-radius: 6px;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cal-day:hover { border-color: var(--burnt-orange); }
+  .cal-day.outside { background: #fbf8f4; }
+  .cal-day.outside .cal-daynum { color: #c9bfb4; }
+  .cal-day.today { border-color: var(--denim-blue); border-width: 2px; padding: 3px; }
+  .cal-daynum { font-size: 11px; font-variant-numeric: tabular-nums; color: #7d736a; padding: 1px 3px; }
+  .cal-day.today .cal-daynum { color: var(--denim-blue); font-weight: 700; }
+
+  .cal-item {
+    font-size: 10.5px;
+    line-height: 1.25;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border-left: 3px solid;
+    background: #f7f3ee;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  .cal-item-event    { border-color: #4a6fa5; background: #eef2f8; }
+  .cal-item-milestone{ border-color: #7a5ea8; background: #f3eef8; }
+  .cal-item-content  { border-color: #c1502e; background: #fbefe9; }
+  .cal-item-payment  { border-color: #2f8f5b; background: #eaf6ef; }
+  .cal-item-bill     { border-color: #b8912a; background: #fbf4e3; }
+  .cal-more { font-size: 10px; color: #a99e93; padding-left: 4px; }
+
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 11px; color: #7d736a; }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .cal-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  .cal-rail { background: var(--white); border-radius: 10px; padding: 16px; }
+  .cal-rail h3 {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #a99e93;
+    margin-bottom: 10px;
+  }
+  .rail-item { padding: 8px 0; border-bottom: 1px solid #f0e9e0; }
+  .rail-item:last-child { border-bottom: none; }
+  .rail-title { font-size: 12.5px; line-height: 1.35; color: var(--charcoal); }
+  .rail-meta { font-size: 10.5px; color: #a99e93; margin-top: 3px; }
+  .rail-item.saving { opacity: 0.5; }
+  .rail-schedule {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10.5px;
+    margin-top: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px dashed #c9bfb4;
+    background: none;
+    color: #7d736a;
+    cursor: pointer;
+  }
+  .rail-schedule:hover { border-color: var(--burnt-orange); color: var(--burnt-orange); border-style: solid; }
+
+  .cal-create { margin-top: 12px; }
+  .cal-create input, .cal-create select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border: 1px solid #ded5c9;
+    border-radius: 6px;
+    outline: none;
+    background: var(--white);
+    color: var(--charcoal);
+  }
+  .cal-create input:focus, .cal-create select:focus { border-color: var(--burnt-orange); }
+  .cal-create .cal-create-actions { display: flex; gap: 8px; }
+  .cal-create button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid #ded5c9;
+    background: var(--white);
+    color: var(--charcoal);
+    cursor: pointer;
+  }
+  .cal-create button.primary {
+    background: var(--burnt-orange);
+    border-color: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+  }
+
+  @media (max-width: 900px) {
+    .calendar-layout { grid-template-columns: minmax(0, 1fr); }
+    .cal-day { min-height: 68px; }
+    .cal-item { font-size: 9.5px; }
+    .cal-create input, .cal-create select { font-size: 16px; }
+  }
+
   .toast {
     position: fixed;
     left: 50%;
@@ -534,7 +696,12 @@
 
 <div class="layout">
   <div class="active-mobile" id="dashboardCol">
+    <div class="view-switch">
+      <button class="view-btn active" id="viewDashBtn">Dashboard</button>
+      <button class="view-btn" id="viewCalBtn">Calendar</button>
+    </div>
     <div class="dashboard-grid" id="dashboardGrid"></div>
+    <div class="calendar-view" id="calendarView" hidden></div>
   </div>
 
   <div id="chatCol">

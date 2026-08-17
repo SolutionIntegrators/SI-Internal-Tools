@@ -42,7 +42,7 @@ export async function handleTasks(env, ctx) {
   const workScope = scopeParams(env.CLICKUP_WORK_FOLDER_IDS, env.CLICKUP_WORK_LIST_IDS);
   const supportScope = scopeParams(env.CLICKUP_SUPPORT_FOLDER_IDS, env.CLICKUP_SUPPORT_LIST_IDS);
 
-  const [user, workTasks, ticketTasks, projectRows] = await Promise.all([
+  const [user, workTasks, ticketTasks, projectRows, contentTasks] = await Promise.all([
     softly(warnings, "ClickUp user", clickup.currentUser(env), null),
     softly(
       warnings,
@@ -59,6 +59,7 @@ export async function handleTasks(env, ctx) {
         )
       : Promise.resolve([]),
     softly(warnings, "Client projects", fetchProjects(env), null),
+    softly(warnings, "Content", fetchContentTasks(env), []),
   ]);
 
   const assigneeId = env.CLICKUP_USER_ID || user?.id;
@@ -91,11 +92,52 @@ export async function handleTasks(env, ctx) {
       })),
     },
     clientProjects: clientProjects({ projectRows, workTasks, env, today: localDate(new Date(now), tz) }),
+    contentPipeline: contentPipeline(contentTasks, { tz }),
     warnings,
   };
 
   ctx.waitUntil(writeSnapshot(env, "tasks", payload));
   return json(payload);
+}
+
+/**
+ * Content lives in the ClickUp Content Management list, which is where the work
+ * actually happens — the Airtable table it used to read was downstream of this
+ * and only received items once they hit "Send to Airtable", so the dashboard
+ * was showing the tail of the pipeline rather than the pipeline.
+ */
+async function fetchContentTasks(env) {
+  if (!env.CLICKUP_CONTENT_LIST_ID) return [];
+  return clickup.listTasks(env, env.CLICKUP_CONTENT_LIST_ID, {
+    include_closed: false,
+    subtasks: false,
+  });
+}
+
+/**
+ * Dated items first, soonest first, then the undated backlog. Sorting purely by
+ * date would bury everything without one, and most of this list has no date.
+ */
+export function contentPipeline(tasks, { tz, limit = 5 }) {
+  const shaped = tasks.map((task) => {
+    const due = clickup.dueMs(task);
+    return {
+      id: task.id,
+      title: task.name || "Untitled",
+      stage: task.status?.status || "",
+      platform: clickup.customField(task, "Content Type"),
+      dueDate: due ? localDate(new Date(due), tz) : "",
+    };
+  });
+
+  return shaped
+    .sort((a, b) => {
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    })
+    .slice(0, limit);
 }
 
 /**

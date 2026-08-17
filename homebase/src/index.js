@@ -17,6 +17,8 @@ import { handleTasks, cachedTasks } from "./routes/tasks.js";
 import { handleCalendar, cachedCalendar } from "./routes/calendar.js";
 import { handleMoney, cachedMoney } from "./routes/money.js";
 import { handleChat } from "./routes/chat.js";
+import { handleMonth } from "./routes/month.js";
+import { handleCreateTask } from "./routes/taskCreate.js";
 import { handleComplete, handleSetStatus, handleSetDue } from "./routes/taskEdits.js";
 import {
   handleInvoiceStatus,
@@ -85,6 +87,14 @@ async function route(request, env, ctx, url) {
 
   if (url.pathname === "/api/chat" && request.method === "POST") {
     return handleChat(request, env);
+  }
+
+  if (url.pathname === "/api/dashboard/month" && request.method === "GET") {
+    return handleMonth(env, ctx, url);
+  }
+
+  if (url.pathname === "/api/tasks" && request.method === "POST") {
+    return handleCreateTask(request, env);
   }
 
   const edit = url.pathname.match(/^\/api\/tasks\/([^/]+)\/(complete|status|due)$/);

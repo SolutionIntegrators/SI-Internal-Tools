@@ -4,12 +4,11 @@
 //   SI Money Metrics          Income Tracking (revenue), Invoice Tracking (owed)
 //   99 Problems ...           Recurring Items (bills as recurrence rules),
 //                             Weekly Revenue Goals (this week's target)
-//   SI Content Hub            Social Media Management (the content pipeline)
 import { json, softly } from "../lib/http.js";
 import { localDate, startOfWeek, endOfWeek, addDays } from "../lib/dates.js";
 import * as airtable from "../services/airtable.js";
 import { occurrencesInWindow } from "../lib/recurrence.js";
-import { revenueNote, contentStage } from "../lib/filters.js";
+import { revenueNote } from "../lib/filters.js";
 import { readSnapshot, writeSnapshot } from "../lib/cache.js";
 import { isSettled } from "../lib/moneyEdits.js";
 
@@ -24,12 +23,11 @@ export async function handleMoney(env, ctx) {
   const weekEnd = endOfWeek(now, tz); // Saturday
   const warnings = [];
 
-  const [collected, weeklyGoal, invoices, recurring, content] = await Promise.all([
+  const [collected, weeklyGoal, invoices, recurring] = await Promise.all([
     softly(warnings, "Revenue", fetchCollected(env, weekStart, today), []),
     softly(warnings, "Weekly goal", fetchWeeklyGoal(env, weekStart, weekEnd), null),
     softly(warnings, "Upcoming payments", fetchOpenInvoices(env, today), []),
     softly(warnings, "Bills", fetchRecurringExpenses(env), []),
-    softly(warnings, "Content", fetchContent(env), []),
   ]);
 
   const goal = weeklyGoal ?? Number(env.REVENUE_GOAL || 7500);
@@ -57,11 +55,6 @@ export async function handleMoney(env, ctx) {
     // button that always fails.
     billsWritable: Boolean(env.AIRTABLE_BILLS_PAID_THROUGH_FIELD),
     week: { start: weekStart, end: weekEnd },
-    contentPipeline: content.slice(0, 5).map((record) => ({
-      title: airtable.toText(record.fields?.[field.contentTitle]) || "Untitled",
-      stage: contentStage(airtable.toText(record.fields?.[field.contentStatus])),
-      platform: airtable.toText(record.fields?.[field.contentType]),
-    })),
     warnings,
   };
 
@@ -81,10 +74,6 @@ function fields(env) {
     invoiceDue: env.AIRTABLE_INVOICE_DUE_FIELD || "Due Date",
     invoiceAmount: env.AIRTABLE_INVOICE_AMOUNT_FIELD || "Payment Amount",
     invoiceTotal: env.AIRTABLE_INVOICE_TOTAL_FIELD || "Invoice Total",
-    contentTitle: env.AIRTABLE_CONTENT_TITLE_FIELD || "🛑 Name",
-    contentStatus: env.AIRTABLE_CONTENT_STATUS_FIELD || "‼️ Status",
-    contentType: env.AIRTABLE_CONTENT_TYPE_FIELD || "🛑 Content Type",
-    contentDate: env.AIRTABLE_CONTENT_DATE_FIELD || "Date to Be Posted",
   };
 }
 
@@ -151,23 +140,14 @@ async function fetchRecurringExpenses(env) {
   });
 }
 
-async function fetchContent(env) {
-  if (!env.AIRTABLE_CONTENT_BASE_ID || !env.AIRTABLE_CONTENT_TABLE) return [];
-  const field = fields(env);
-  return airtable.listRecords(env, env.AIRTABLE_CONTENT_BASE_ID, env.AIRTABLE_CONTENT_TABLE, {
-    filterByFormula: `IS_AFTER({${field.contentDate}}, ${airtable.quote(addDays(localDate(new Date(), env.TIMEZONE), -3))})`,
-    sort: [{ field: field.contentDate, direction: "asc" }],
-    maxRecords: 25,
-  });
-}
 
 /**
  * Expand the recurrence rules into actual dates and keep the expenses landing
- * in the next 7 days. Inactive rules are skipped — the checkbox is Ashley's
+ * within `days` of `today` — 7 for the card, a whole grid for the calendar. Inactive rules are skipped — the checkbox is Ashley's
  * off switch, and Airtable omits it entirely when unchecked.
  */
-export function billsDueSoon(records, { env, today, limit = 5 }) {
-  const horizon = addDays(today, 7);
+export function billsDueSoon(records, { env, today, days = 7, limit = 5 }) {
+  const horizon = addDays(today, days);
   const paidField = env.AIRTABLE_BILLS_PAID_THROUGH_FIELD || "";
   const books = (env.AIRTABLE_BILLS_BOOKS || "")
     .split(",")

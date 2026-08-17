@@ -43,6 +43,9 @@ CLICKUP_WORK_LIST_IDS = ""
 # Repeat Client Project Requests — add folder 39953826 here instead if those
 # should count as tickets too.
 CLICKUP_SUPPORT_LIST_IDS = "900601724895"
+# The content pipeline reads this list directly rather than the Airtable table
+# downstream of it, so items show up while they are being made, not after.
+CLICKUP_CONTENT_LIST_ID = "901414048215"
 CLICKUP_SUPPORT_FOLDER_IDS = ""
 # Only needed if the API token belongs to someone other than Ashley.
 CLICKUP_USER_ID = ""

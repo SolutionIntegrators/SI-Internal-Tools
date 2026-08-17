@@ -26,6 +26,7 @@ const env = {
   AIRTABLE_BILLS_BASE_ID: "appQeUH0Lb6i3lxTL",
   AIRTABLE_BILLS_TABLE: "Recurring Items",
   AIRTABLE_BILLS_PAID_THROUGH_FIELD: "Paid Through",
+  CLICKUP_CONTENT_LIST_ID: "901414048215",
   AIRTABLE_GOALS_TABLE: "Weekly Revenue Goals",
   AIRTABLE_CONTENT_BASE_ID: "appzyaY40KNIy3n4t",
   AIRTABLE_CONTENT_TABLE: "Social Media Management",
@@ -33,9 +34,9 @@ const env = {
 const ctx = { waitUntil() {} };
 
 for (const [name, handler, expectedKeys] of [
-  ["tasks", handleTasks, ["myTasksSoon", "readyForReview", "supportTickets", "clientProjects"]],
+  ["tasks", handleTasks, ["myTasksSoon", "readyForReview", "supportTickets", "clientProjects", "contentPipeline"]],
   ["calendar", handleCalendar, ["nextCalls", "calendarToday", "calendarWeek"]],
-  ["money", handleMoney, ["revenue", "upcomingPayments", "upcomingBills", "contentPipeline"]],
+  ["money", handleMoney, ["revenue", "upcomingPayments", "upcomingBills", "week"]],
 ]) {
   test(`${name} endpoint answers with its full shape when every source is unconfigured`, async () => {
     const response = await handler(env, ctx);

@@ -95,6 +95,55 @@ export function createdMs(task) {
   return task.date_created ? Number(task.date_created) : null;
 }
 
+/** Every task on one list, with its custom fields. Used by the content pipeline. */
+export async function listTasks(env, listId, params = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) for (const item of value) query.append(key, String(item));
+    else query.append(key, String(value));
+  }
+  const data = await fetchJson(
+    "ClickUp",
+    `${BASE}/list/${encodeURIComponent(listId)}/task?${query}`,
+    { headers: headers(env) },
+  );
+  return data.tasks || [];
+}
+
+/**
+ * A custom field's display value by field name. ClickUp is inconsistent about
+ * dropdowns: sometimes `value` is the option's uuid, sometimes its orderindex.
+ * Both are resolved back to the option name here so callers get a plain string.
+ */
+export function customField(task, fieldName) {
+  const field = (task.custom_fields || []).find(
+    (candidate) => String(candidate.name).toLowerCase() === String(fieldName).toLowerCase(),
+  );
+  if (!field || field.value === undefined || field.value === null || field.value === "") return "";
+
+  const options = field.type_config?.options || [];
+  if (options.length) {
+    const match =
+      options.find((option) => option.id === field.value) ||
+      options.find((option) => option.orderindex === field.value) ||
+      options.find((option) => String(option.orderindex) === String(field.value));
+    if (match) return match.name || match.label || "";
+  }
+  return typeof field.value === "object" ? "" : String(field.value);
+}
+
+/** The option id a dropdown wants when writing. Null when the name is unknown. */
+export function dropdownOptionId(list, fieldName, optionName) {
+  const field = (list.fields || list.custom_fields || []).find(
+    (candidate) => String(candidate.name).toLowerCase() === String(fieldName).toLowerCase(),
+  );
+  const option = (field?.type_config?.options || []).find(
+    (candidate) => String(candidate.name).toLowerCase() === String(optionName).toLowerCase(),
+  );
+  return option ? { fieldId: field.id, optionId: option.id } : null;
+}
+
 /** Compact shape for the chat tool result — full task JSON is far too large. */
 export function summarize(task) {
   return {
@@ -109,8 +158,8 @@ export function summarize(task) {
 }
 
 // ---------- Writes ----------
-// The dashboard can complete a task and move its due date. Nothing else writes:
-// tickets, money, and content stay read-only.
+// The dashboard can complete a task, move its due date, and create a content
+// task. Support tickets stay read-only — those are client-facing.
 
 export async function getTask(env, taskId) {
   return fetchJson("ClickUp", `${BASE}/task/${encodeURIComponent(taskId)}`, { headers: headers(env) });
@@ -124,6 +173,22 @@ export async function getList(env, listId) {
 export async function updateTask(env, taskId, body) {
   return fetchJson("ClickUp", `${BASE}/task/${encodeURIComponent(taskId)}`, {
     method: "PUT",
+    headers: { ...headers(env), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** A list's custom field definitions, needed to resolve a dropdown name to its id. */
+export async function listFields(env, listId) {
+  const data = await fetchJson("ClickUp", `${BASE}/list/${encodeURIComponent(listId)}/field`, {
+    headers: headers(env),
+  });
+  return data.fields || [];
+}
+
+export async function createTask(env, listId, body) {
+  return fetchJson("ClickUp", `${BASE}/list/${encodeURIComponent(listId)}/task`, {
+    method: "POST",
     headers: { ...headers(env), "content-type": "application/json" },
     body: JSON.stringify(body),
   });

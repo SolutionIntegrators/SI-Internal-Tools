@@ -290,16 +290,18 @@ function render() {
       ),
     );
   }
-  if (status.money === "error") {
-    projectCards.push(errorCard(errors.money, "money"));
-  } else if (!moneyDone) {
+  // Content moved from Airtable to ClickUp, so it now rides on the tasks
+  // payload and its card has to wait on that request rather than on money.
+  if (status.tasks === "error") {
+    projectCards.push(errorCard(errors.tasks, "tasks"));
+  } else if (!tasksDone) {
     projectCards.push(loadingCard("Loading content pipeline..."));
   } else {
     projectCards.push(
       buildCard(
         "Content Pipeline",
         d.contentPipeline,
-        (c) => `<div class="row"><span class="row-title">${escapeHtml(c.title)}</span><div class="row-sub">${escapeHtml(c.platform || "")} — ${escapeHtml(c.stage || "")}</div></div>`,
+        (c) => `<div class="row"><span class="row-title">${escapeHtml(c.title)}</span><div class="row-sub">${[c.platform, c.stage, c.dueDate].filter(Boolean).map(escapeHtml).join(" — ")}</div></div>`,
       ),
     );
   }
@@ -686,6 +688,260 @@ function editDueDate(button) {
   input.addEventListener("blur", save);
 }
 
+
+// ---------- Calendar view ----------
+
+let monthData = null;
+let monthKey = null;      // "2026-08"
+let monthLoading = false;
+let openCreateDate = null;
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const KIND_LABELS = {
+  event: "Calls",
+  milestone: "Project milestones",
+  content: "Content",
+  payment: "Payments",
+  bill: "Bills",
+};
+
+/** "2026-08" shifted by whole months, without tripping over December. */
+function shiftMonthKey(key, months) {
+  const [year, month] = key.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1 + months, 1));
+  return shifted.toISOString().slice(0, 7);
+}
+
+function monthLabel(key) {
+  const [year, month] = key.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+async function loadMonth(key) {
+  monthKey = key;
+  monthLoading = true;
+  renderCalendar();
+  try {
+    monthData = await api(`/api/dashboard/month?month=${encodeURIComponent(key)}`);
+    monthKey = monthData.month || key;
+  } catch (err) {
+    monthData = { error: err.message };
+  } finally {
+    monthLoading = false;
+    renderCalendar();
+  }
+}
+
+function renderCalendar() {
+  const root = $("calendarView");
+  if (!root) return;
+  root.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "cal-head";
+  head.innerHTML = `<div class="cal-title">${escapeHtml(monthKey ? monthLabel(monthKey) : "Calendar")}</div>
+    <div class="cal-nav">
+      <button data-month-step="-1">&larr;</button>
+      <button data-month-today="1">Today</button>
+      <button data-month-step="1">&rarr;</button>
+    </div>`;
+  root.appendChild(head);
+
+  if (monthLoading && !monthData) {
+    root.appendChild(loadingCard("Loading the month..."));
+    return;
+  }
+  if (monthData?.error) {
+    root.appendChild(errorCard(monthData.error, "month"));
+    return;
+  }
+  if (!monthData) return;
+
+  const layout = document.createElement("div");
+  layout.className = "calendar-layout";
+
+  // --- grid ---
+  const grid = document.createElement("div");
+  grid.className = "cal-grid";
+  const weekdays = WEEKDAY_LABELS.map((day) => `<div class="cal-weekday">${day}</div>`).join("");
+  const weeks = (monthData.weeks || [])
+    .map((week) => `<div class="cal-week">${week.map(dayCell).join("")}</div>`)
+    .join("");
+  grid.innerHTML = `<div class="cal-weekdays">${weekdays}</div>${weeks}`;
+  layout.appendChild(grid);
+
+  const legend = document.createElement("div");
+  legend.className = "cal-legend";
+  legend.innerHTML = Object.entries(KIND_LABELS)
+    .map(
+      ([kind, label]) =>
+        `<span><i class="cal-swatch cal-item-${kind}" style="border-left-width:9px;border-left-style:solid"></i>${escapeHtml(label)}</span>`,
+    )
+    .join("");
+  grid.appendChild(legend);
+
+  // --- rail ---
+  const rail = document.createElement("div");
+  rail.className = "cal-rail";
+  const unscheduled = monthData.unscheduled || [];
+  const railRows = unscheduled.length
+    ? unscheduled
+        .map(
+          (item) => `<div class="rail-item" data-rail-id="${escapeHtml(item.id)}">
+            <div class="rail-title">${escapeHtml(item.title)}</div>
+            <div class="rail-meta">${[item.platform, item.stage].filter(Boolean).map(escapeHtml).join(" — ")}</div>
+            <button class="rail-schedule" data-schedule="${escapeHtml(item.id)}">Give it a date</button>
+          </div>`,
+        )
+        .join("")
+    : '<div class="empty-row">Everything has a date.</div>';
+  rail.innerHTML = `<h3>Unscheduled content${unscheduled.length ? ` (${unscheduled.length})` : ""}</h3>${railRows}`;
+  layout.appendChild(rail);
+
+  root.appendChild(layout);
+
+  const warnings = monthData.warnings || [];
+  if (warnings.length) {
+    const note = document.createElement("div");
+    note.className = "warning-note";
+    note.textContent = `Some sources didn't answer: ${warnings.join("; ")}`;
+    root.appendChild(note);
+  }
+
+  if (openCreateDate) mountCreateForm(openCreateDate);
+}
+
+function dayCell(date) {
+  const items = (monthData.days || {})[date] || [];
+  const outside = date < monthData.first || date > monthData.last;
+  const today = date === monthData.today;
+  const shown = items.slice(0, 3);
+  const rest = items.length - shown.length;
+
+  const chips = shown
+    .map((item) => {
+      const label = item.meta ? `${item.title} · ${item.meta}` : item.title;
+      return `<div class="cal-item cal-item-${escapeHtml(item.kind)}" title="${escapeHtml(label)}">${escapeHtml(item.title)}</div>`;
+    })
+    .join("");
+
+  return `<div class="cal-day${outside ? " outside" : ""}${today ? " today" : ""}" data-day="${escapeHtml(date)}">
+    <div class="cal-daynum">${Number(date.slice(8, 10))}</div>
+    ${chips}${rest > 0 ? `<div class="cal-more">+${rest} more</div>` : ""}
+  </div>`;
+}
+
+/** The create form drops into the rail so it never resizes the grid mid-click. */
+function mountCreateForm(date) {
+  const rail = document.querySelector(".cal-rail");
+  if (!rail || !monthData?.canCreate) return;
+  document.querySelector(".cal-create")?.remove();
+
+  const types = monthData.contentTypes || [];
+  const form = document.createElement("form");
+  form.className = "cal-create";
+  form.innerHTML = `<h3>New task — ${escapeHtml(date)}</h3>
+    <input type="text" id="createTitle" placeholder="What is it?" maxlength="200" autocomplete="off">
+    ${types.length ? `<select id="createType"><option value="">No content type</option>${types.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("")}</select>` : ""}
+    <div class="cal-create-actions">
+      <button type="submit" class="primary">Add to Content Management</button>
+      <button type="button" data-cancel-create="1">Cancel</button>
+    </div>`;
+  rail.prepend(form);
+  form.querySelector("#createTitle").focus();
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const title = form.querySelector("#createTitle").value.trim();
+    if (!title) return;
+    const contentType = form.querySelector("#createType")?.value || "";
+    const submit = form.querySelector("button[type=submit]");
+    submit.disabled = true;
+    submit.textContent = "Adding...";
+    try {
+      const result = await api("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({ title, due: date, contentType: contentType || undefined }),
+      });
+      openCreateDate = null;
+      showToast(`Added "${result.task.title}" on ${date}.`, { ms: 5000 });
+      await loadMonth(monthKey);
+      // The pipeline card reads the same list, so keep it honest.
+      loadSection("tasks");
+    } catch (err) {
+      submit.disabled = false;
+      submit.textContent = "Add to Content Management";
+      showToast(`Couldn't create that: ${err.message}`, { error: true });
+    }
+  });
+}
+
+/** Schedule an undated content task straight from the rail. */
+function scheduleRailItem(button) {
+  const taskId = button.dataset.schedule;
+  const row = document.querySelector(`[data-rail-id="${CSS.escape(taskId)}"]`);
+  const input = document.createElement("input");
+  input.type = "date";
+  input.className = "due-input";
+  button.replaceWith(input);
+  input.focus();
+  if (input.showPicker) {
+    try {
+      input.showPicker();
+    } catch {
+      /* not allowed here; the field still works */
+    }
+  }
+
+  let settled = false;
+  const restore = () => {
+    if (settled) return;
+    settled = true;
+    input.replaceWith(button);
+  };
+
+  const save = async () => {
+    if (settled) return;
+    const value = input.value;
+    if (!value) return restore();
+    settled = true;
+    row?.classList.add("saving");
+    try {
+      await api(`/api/tasks/${encodeURIComponent(taskId)}/due`, {
+        method: "POST",
+        body: JSON.stringify({ due: value }),
+      });
+      showToast(`Scheduled for ${value}.`, { ms: 4000 });
+      await loadMonth(monthKey);
+      loadSection("tasks");
+    } catch (err) {
+      settled = false;
+      row?.classList.remove("saving");
+      restore();
+      showToast(`Couldn't schedule that: ${err.message}`, { error: true });
+    }
+  };
+
+  input.addEventListener("change", save);
+  input.addEventListener("blur", save);
+}
+
+function showView(view) {
+  const calendar = view === "calendar";
+  document.body.classList.toggle("calendar-mode", calendar);
+  $("dashboardGrid").hidden = calendar;
+  $("calendarView").hidden = !calendar;
+  $("viewDashBtn").className = "view-btn" + (calendar ? "" : " active");
+  $("viewCalBtn").className = "view-btn" + (calendar ? " active" : "");
+  if (calendar && !monthData && !monthLoading) {
+    loadMonth(monthKey || new Date().toISOString().slice(0, 7));
+  }
+}
+
 // ---------- Chat ----------
 
 function appendMessage(role, text) {
@@ -764,6 +1020,52 @@ $("chatInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendChat();
+  }
+});
+
+$("viewDashBtn").addEventListener("click", () => showView("dashboard"));
+$("viewCalBtn").addEventListener("click", () => showView("calendar"));
+
+$("calendarView").addEventListener("click", (event) => {
+  const retry = event.target.dataset?.retry;
+  if (retry === "month") {
+    monthData = null;
+    loadMonth(monthKey);
+    return;
+  }
+
+  const step = event.target.dataset?.monthStep;
+  if (step) {
+    openCreateDate = null;
+    monthData = null;
+    loadMonth(shiftMonthKey(monthKey, Number(step)));
+    return;
+  }
+  if (event.target.dataset?.monthToday) {
+    openCreateDate = null;
+    monthData = null;
+    loadMonth(new Date().toISOString().slice(0, 7));
+    return;
+  }
+
+  if (event.target.dataset?.cancelCreate) {
+    openCreateDate = null;
+    document.querySelector(".cal-create")?.remove();
+    return;
+  }
+
+  const schedule = event.target.closest(".rail-schedule");
+  if (schedule) {
+    scheduleRailItem(schedule);
+    return;
+  }
+
+  // A day opens the create form for that date. Done last so the controls above
+  // aren't swallowed by the cell they sit in.
+  const day = event.target.closest(".cal-day");
+  if (day) {
+    openCreateDate = day.dataset.day;
+    mountCreateForm(openCreateDate);
   }
 });
 
