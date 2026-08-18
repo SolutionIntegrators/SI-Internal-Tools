@@ -34,9 +34,9 @@ const env = {
 const ctx = { waitUntil() {} };
 
 for (const [name, handler, expectedKeys] of [
-  ["tasks", handleTasks, ["myTasksSoon", "readyForReview", "supportTickets", "clientProjects", "contentPipeline"]],
+  ["tasks", handleTasks, ["myTasksSoon", "overdue", "overdueCount", "urgent", "readyForReview", "supportTickets", "clientProjects", "contentPipeline"]],
   ["calendar", handleCalendar, ["nextCalls", "calendarToday", "calendarWeek"]],
-  ["money", handleMoney, ["revenue", "upcomingPayments", "upcomingBills", "week"]],
+  ["money", handleMoney, ["revenue", "month", "upcomingPayments", "upcomingBills", "week"]],
 ]) {
   test(`${name} endpoint answers with its full shape when every source is unconfigured`, async () => {
     const response = await handler(env, ctx);
@@ -104,4 +104,25 @@ test("the flag plus all three secrets is what actually turns the calendar on", (
     }),
     true,
   );
+});
+
+test("the tabs get the shapes they render, not just the keys", async () => {
+  // Each tab reads a specific sub-shape. A rename upstream would leave the key
+  // present and the tab blank, which is the failure these guard against.
+  const money = await (await handleMoney(env, ctx)).json();
+  assert.equal(typeof money.revenue.goal, "number");
+  assert.equal(typeof money.revenue.current, "number");
+  assert.equal(typeof money.week.start, "string");
+  assert.equal(typeof money.week.end, "string");
+  // month is null when the summary table is unreachable — the tab drops the
+  // tile rather than rendering NaN.
+  assert.ok(money.month === null || typeof money.month.projectedToGoal === "number");
+
+  const tasks = await (await handleTasks(env, ctx)).json();
+  assert.ok(Array.isArray(tasks.overdue));
+  assert.ok(Array.isArray(tasks.urgent));
+  assert.equal(typeof tasks.overdueCount, "number");
+  assert.ok(Array.isArray(tasks.supportTickets.byClient));
+  assert.equal(typeof tasks.supportTickets.openCount, "number");
+  assert.ok(Array.isArray(tasks.clientProjects));
 });

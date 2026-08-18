@@ -35,6 +35,41 @@ export function isClosed(task, env) {
  * Anything already overdue is included and sorted first — an overdue task is
  * more urgent than one due Thursday, and hiding it would be the wrong call.
  */
+/**
+ * Assigned to this person and still open. The shared base every Work-tab
+ * selector narrows further.
+ */
+export function mine(tasks, { userId, env }) {
+  return tasks
+    .filter((task) => !isClosed(task, env))
+    .filter((task) => (task.assignees || []).some((assignee) => String(assignee.id) === String(userId)));
+}
+
+/**
+ * Work whose due date has already passed, oldest first. Split out from due-soon
+ * because they need different treatment: due-soon is a plan for the week,
+ * overdue is a list of promises already broken, and mixing them buries the
+ * second in the first.
+ */
+export function selectOverdue(tasks, { userId, now, env, limit = 8 }) {
+  const startOfToday = now - (now % DAY_MS);
+  return mine(tasks, { userId, env })
+    .filter((task) => {
+      const due = dueMs(task);
+      return due !== null && due < startOfToday;
+    })
+    .sort((a, b) => dueMs(a) - dueMs(b))
+    .slice(0, limit);
+}
+
+/** ClickUp priority 1 is Urgent; the dashboard promotes those on their own. */
+export function isUrgent(task) {
+  const priority = task.priority;
+  if (!priority) return false;
+  const name = String(priority.priority || priority).toLowerCase();
+  return name === "urgent" || String(priority.id) === "1";
+}
+
 export function selectDueSoon(tasks, { userId, now, env, limit = 5 }) {
   const horizon = now + 3 * DAY_MS;
   return tasks
@@ -42,7 +77,8 @@ export function selectDueSoon(tasks, { userId, now, env, limit = 5 }) {
     .filter((task) => (task.assignees || []).some((assignee) => String(assignee.id) === String(userId)))
     .filter((task) => {
       const due = dueMs(task);
-      return due !== null && due <= horizon;
+      // Overdue work is listed separately now, so this really is "next 3 days".
+      return due !== null && due <= horizon && due >= now - (now % DAY_MS);
     })
     .sort((a, b) => dueMs(a) - dueMs(b))
     .slice(0, limit);
@@ -67,7 +103,31 @@ export function selectTickets(tickets, { now, env, limit = 5 }) {
     })
     .sort((a, b) => createdMs(a) - createdMs(b))
     .slice(0, limit);
-  return { openCount: open.length, overdue };
+  return { openCount: open.length, overdue, byClient: ticketsByClient(open, now) };
+}
+
+/**
+ * Tickets grouped by who they belong to. One client with four open tickets is a
+ * different conversation from four clients with one each, and a flat list of
+ * eight rows hides which of the two you are looking at.
+ */
+export function ticketsByClient(open, now) {
+  const groups = new Map();
+  for (const ticket of open) {
+    // Support ticket titles are "Client — what broke", which is the only place
+    // the client name appears on this list.
+    const name = String(ticket.name || "");
+    const split = name.split(/\s+[—–|]\s+/);
+    const client = (split.length > 1 ? split[0] : ticket.list?.name || "Unassigned").trim();
+    const created = createdMs(ticket);
+
+    const group = groups.get(client) || { client, count: 0, oldestDays: 0, titles: [] };
+    group.count += 1;
+    if (created !== null) group.oldestDays = Math.max(group.oldestDays, daysSince(created, now));
+    if (split.length > 1) group.titles.push(split.slice(1).join(" — ").trim());
+    groups.set(client, group);
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || b.oldestDays - a.oldestDays);
 }
 
 /**

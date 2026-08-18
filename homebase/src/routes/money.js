@@ -2,6 +2,7 @@
 //
 // Three bases, each shaped differently:
 //   SI Money Metrics          Income Tracking (revenue), Invoice Tracking (owed)
+//   SI Money Metrics          Financial Summary (the month's goal and actual)
 //   99 Problems ...           Recurring Items (bills as recurrence rules),
 //                             Weekly Revenue Goals (this week's target)
 import { json, softly } from "../lib/http.js";
@@ -23,11 +24,12 @@ export async function handleMoney(env, ctx) {
   const weekEnd = endOfWeek(now, tz); // Saturday
   const warnings = [];
 
-  const [collected, weeklyGoal, invoices, recurring] = await Promise.all([
+  const [collected, weeklyGoal, invoices, recurring, summary] = await Promise.all([
     softly(warnings, "Revenue", fetchCollected(env, weekStart, today), []),
     softly(warnings, "Weekly goal", fetchWeeklyGoal(env, weekStart, weekEnd), null),
     softly(warnings, "Upcoming payments", fetchOpenInvoices(env, today), []),
     softly(warnings, "Bills", fetchRecurringExpenses(env), []),
+    softly(warnings, "Month", fetchMonthSummary(env, now, tz), null),
   ]);
 
   const goal = weeklyGoal ?? Number(env.REVENUE_GOAL || 7500);
@@ -39,9 +41,16 @@ export async function handleMoney(env, ctx) {
 
   const payload = {
     revenue: { goal, current: Math.round(current), note: revenueNote(current, goal) },
+    // The month is its own question and its own row in Airtable: the goal is
+    // set there rather than derived from the weekly one, and "projected" is
+    // collected plus everything still invoiced — not a run-rate guess.
+    month: summary,
     upcomingPayments: invoices.slice(0, 5).map((record) => ({
       id: record.id,
-      client: clientFromSummary(airtable.toText(record.fields?.[field.invoiceSummary])),
+      client: clientFromSummary(
+        airtable.toText(record.fields?.[field.invoiceSummary]),
+        airtable.toText(record.fields?.[field.invoiceNotes]),
+      ),
       amount: airtable.formatMoney(
         airtable.toAmount(record.fields?.[field.invoiceAmount]) ||
           airtable.toAmount(record.fields?.[field.invoiceTotal]),
@@ -71,6 +80,7 @@ function fields(env) {
     incomeStatus: env.AIRTABLE_INCOME_STATUS_FIELD || "Status",
     invoiceSummary: env.AIRTABLE_INVOICE_SUMMARY_FIELD || "Summary",
     invoiceStatus: env.AIRTABLE_INVOICE_STATUS_FIELD || "Status",
+    invoiceNotes: env.AIRTABLE_INVOICE_NOTES_FIELD || "Notes",
     invoiceDue: env.AIRTABLE_INVOICE_DUE_FIELD || "Due Date",
     invoiceAmount: env.AIRTABLE_INVOICE_AMOUNT_FIELD || "Payment Amount",
     invoiceTotal: env.AIRTABLE_INVOICE_TOTAL_FIELD || "Invoice Total",
@@ -97,6 +107,55 @@ async function fetchCollected(env, weekStart, today) {
     filterByFormula: `AND(${airtable.dateRangeFormula(field.incomeDate, weekStart, today)}${notExcluded})`,
     maxRecords: 100,
   });
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * The month's goal, actual and projected close, from the one row per month in
+ * the Financial Summary table. Everything here is already computed in Airtable
+ * — the dashboard reads it rather than recomputing it, so the two can never
+ * disagree about what the month looks like.
+ */
+async function fetchMonthSummary(env, now, tz) {
+  const table = env.AIRTABLE_SUMMARY_TABLE;
+  if (!env.AIRTABLE_MONEY_BASE_ID || !table) return null;
+
+  const local = localDate(now, tz);
+  const monthName = MONTH_NAMES[Number(local.slice(5, 7)) - 1];
+  const year = local.slice(0, 4);
+
+  const monthField = env.AIRTABLE_SUMMARY_MONTH_FIELD || "Month";
+  const yearField = env.AIRTABLE_SUMMARY_YEAR_FIELD || "Year";
+  const goalField = env.AIRTABLE_SUMMARY_GOAL_FIELD || "🎯 Income";
+  const actualField = env.AIRTABLE_SUMMARY_ACTUAL_FIELD || "💪🏾Total Income";
+  const projectedField = env.AIRTABLE_SUMMARY_PROJECTED_FIELD || "🤔 Expected Income";
+
+  const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, table, {
+    filterByFormula: `AND({${monthField}} = ${airtable.quote(monthName)}, {${yearField}} = ${airtable.quote(year)})`,
+    maxRecords: 1,
+  });
+  const row = records[0];
+  if (!row) return null;
+
+  const goal = airtable.toAmount(row.fields?.[goalField]);
+  const actual = airtable.toAmount(row.fields?.[actualField]);
+  const projected = airtable.toAmount(row.fields?.[projectedField]);
+
+  return {
+    label: `${monthName} ${year}`,
+    goal: Math.round(goal),
+    actual: Math.round(actual),
+    projected: Math.round(projected),
+    // Positive means ahead. Both are reported because "behind on collections"
+    // and "behind even once everything invoiced lands" are different problems:
+    // the first is chasing, the second is selling.
+    toGoal: Math.round(actual - goal),
+    projectedToGoal: Math.round(projected - goal),
+  };
 }
 
 /**
@@ -202,8 +261,15 @@ export function billsDueSoon(records, { env, today, days = 7, limit = 5 }) {
 }
 
 /** Invoice summaries read "Client | Service ($amount)". The client is the useful half. */
-function clientFromSummary(summary) {
-  return summary.split("|")[0].trim() || summary || "Unnamed";
+/**
+ * Summary is an Airtable formula built from the linked service record, so an
+ * invoice added from the dashboard has none until it is linked up. Notes is the
+ * one field the dashboard can write, so it is the fallback rather than showing
+ * a row called "Unnamed".
+ */
+function clientFromSummary(summary, notes = "") {
+  const fromSummary = summary.split("|")[0].trim();
+  return fromSummary || summary || notes.trim() || "Unnamed";
 }
 
 export async function cachedMoney(env) {

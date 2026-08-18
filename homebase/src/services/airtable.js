@@ -91,3 +91,15 @@ export async function updateRecord(env, baseId, table, recordId, fields) {
     body: JSON.stringify({ fields }),
   });
 }
+
+/** Create one record. Returns Airtable's version of it, ids and formulas filled in. */
+export async function createRecord(env, baseId, table, fields) {
+  if (!baseId) throw new ConfigError("Airtable base id is not set");
+  if (!table) throw new ConfigError("Airtable table name is not set");
+  const url = `${BASE}/${baseId}/${encodeURIComponent(table)}`;
+  return fetchJson("Airtable", url, {
+    method: "POST",
+    headers: { ...headers(env), "content-type": "application/json" },
+    body: JSON.stringify({ fields, typecast: true }),
+  });
+}

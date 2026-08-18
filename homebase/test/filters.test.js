@@ -7,6 +7,8 @@ import {
   selectDueSoon,
   selectReadyForReview,
   selectTickets,
+  selectOverdue,
+  isUrgent,
   revenueNote,
   splitCalendar,
   contentStage,
@@ -29,7 +31,7 @@ const task = (overrides) => ({
   ...overrides,
 });
 
-test("due soon covers the next three days and keeps overdue work visible", () => {
+test("due soon is the next three days only — overdue has its own list now", () => {
   const tasks = [
     task({ name: "overdue", due_date: String(NOW - 2 * DAY) }),
     task({ name: "today", due_date: String(NOW + 2 * 3600000) }),
@@ -38,7 +40,62 @@ test("due soon covers the next three days and keeps overdue work visible", () =>
     task({ name: "no due date", due_date: null }),
   ];
   const picked = selectDueSoon(tasks, { userId: 1, now: NOW, env }).map((t) => t.name);
-  assert.deepEqual(picked, ["overdue", "today", "in three days"]);
+  assert.deepEqual(picked, ["today", "in three days"]);
+});
+
+test("overdue is oldest first and excludes anything still due today", () => {
+  const tasks = [
+    task({ name: "two days late", due_date: String(NOW - 2 * DAY) }),
+    task({ name: "two weeks late", due_date: String(NOW - 14 * DAY) }),
+    // Earlier today has passed on the clock but the day has not — not overdue.
+    task({ name: "earlier today", due_date: String(NOW - 3600000) }),
+    task({ name: "tomorrow", due_date: String(NOW + DAY) }),
+    task({ name: "someone else's", assignees: [{ id: 9 }], due_date: String(NOW - 5 * DAY) }),
+    task({ name: "late but done", status: { status: "complete", type: "closed" }, due_date: String(NOW - 5 * DAY) }),
+  ];
+  const picked = selectOverdue(tasks, { userId: 1, now: NOW, env }).map((t) => t.name);
+  assert.deepEqual(picked, ["two weeks late", "two days late"]);
+});
+
+test("urgent is read from ClickUp's priority, in either shape", () => {
+  assert.equal(isUrgent(task({ priority: { priority: "urgent", id: "1" } })), true);
+  assert.equal(isUrgent(task({ priority: { priority: "Urgent" } })), true);
+  assert.equal(isUrgent(task({ priority: { priority: "high", id: "2" } })), false);
+  assert.equal(isUrgent(task({ priority: null })), false);
+  assert.equal(isUrgent(task({})), false);
+});
+
+test("tickets roll up per client, busiest first", () => {
+  // Titles on this list read "Client — what broke", which is the only place
+  // the client name appears.
+  const ticket = (name, daysAgo) => ({
+    name,
+    status: { status: "new", type: "custom" },
+    date_created: String(NOW - daysAgo * DAY),
+    list: { name: "Client Support Requests" },
+  });
+  const { openCount, byClient } = selectTickets(
+    [
+      ticket("Olivia Lawson Marketing — Empty stubs", 12),
+      ticket("Olivia Lawson Marketing — Claude output wrong field", 12),
+      ticket("Olivia Lawson Marketing — Active Project interface", 14),
+      ticket("Maven Marketing — Revision request", 1),
+      ticket("Miere Catering — Onboarding automation broke", 5),
+      ticket("Miere Catering — Invoice edits", 5),
+      { name: "No client prefix", status: { status: "new" }, date_created: String(NOW - DAY), list: { name: "Client Support Requests" } },
+    ],
+    { now: NOW, env },
+  );
+
+  assert.equal(openCount, 7);
+  assert.deepEqual(byClient.map((g) => [g.client, g.count]), [
+    ["Olivia Lawson Marketing", 3],
+    ["Miere Catering", 2],
+    ["Maven Marketing", 1],
+    ["Client Support Requests", 1],
+  ]);
+  assert.equal(byClient[0].oldestDays, 14, "the group carries its oldest ticket");
+  assert.ok(byClient[0].titles.includes("Empty stubs"));
 });
 
 test("due soon ignores other people's tasks and closed work", () => {

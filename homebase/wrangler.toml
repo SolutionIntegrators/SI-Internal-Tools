@@ -81,6 +81,10 @@ AIRTABLE_INVOICE_AMOUNT_FIELD = "Payment Amount"
 AIRTABLE_INVOICE_TOTAL_FIELD = "Invoice Total"
 # The client roster for the Client Projects card.
 AIRTABLE_PROJECTS_TABLE = "ALL Active Projects"
+# One row per month, already carrying the goal, the actual and the projected
+# close. The dashboard reads these rather than recomputing them so it can never
+# disagree with the Airtable interface built on the same table.
+AIRTABLE_SUMMARY_TABLE = "Solution Integrators Financial Summary"
 AIRTABLE_PROJECT_NAME_FIELD = "Company Name"
 AIRTABLE_PROJECT_STATUS_FIELD = "Project Status"
 AIRTABLE_PROJECT_SERVICE_FIELD = "Service"

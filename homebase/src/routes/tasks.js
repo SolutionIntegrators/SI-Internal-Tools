@@ -8,6 +8,8 @@ import {
   selectDueSoon,
   selectReadyForReview,
   selectTickets,
+  selectOverdue,
+  isUrgent,
   isClosed,
 } from "../lib/filters.js";
 import { readSnapshot, writeSnapshot } from "../lib/cache.js";
@@ -65,17 +67,28 @@ export async function handleTasks(env, ctx) {
   const assigneeId = env.CLICKUP_USER_ID || user?.id;
   const tickets = selectTickets(ticketTasks, { now, env });
 
+  const shape = (task) => ({
+    id: task.id,
+    title: task.name,
+    client: clickup.clientOf(task),
+    list: task.list?.name || "",
+    due: relativeDay(new Date(clickup.dueMs(task)), now, tz),
+    dueDate: localDate(new Date(clickup.dueMs(task)), tz),
+    status: task.status?.status || null,
+    urgent: isUrgent(task),
+  });
+
+  const overdue = selectOverdue(workTasks, { userId: assigneeId, now, env });
+
   const payload = {
     // id and status ride along so the page can complete or reschedule a task,
     // and dueDate is the raw value the date control needs.
-    myTasksSoon: selectDueSoon(workTasks, { userId: assigneeId, now, env }).map((task) => ({
-      id: task.id,
-      title: task.name,
-      client: clickup.clientOf(task),
-      due: relativeDay(new Date(clickup.dueMs(task)), now, tz),
-      dueDate: localDate(new Date(clickup.dueMs(task)), tz),
-      status: task.status?.status || null,
-    })),
+    myTasksSoon: selectDueSoon(workTasks, { userId: assigneeId, now, env }).map(shape),
+    // Overdue is its own list rather than the top of due-soon, and anything
+    // urgent in it is promoted so the page can lead with it.
+    overdue: overdue.map(shape),
+    overdueCount: overdue.length,
+    urgent: overdue.filter(isUrgent).map(shape),
     readyForReview: selectReadyForReview(workTasks, { env }).map((task) => ({
       id: task.id,
       title: task.name,
@@ -85,6 +98,7 @@ export async function handleTasks(env, ctx) {
     })),
     supportTickets: {
       openCount: tickets.openCount,
+      byClient: tickets.byClient,
       overdue: tickets.overdue.map((ticket) => ({
         title: ticket.name,
         client: clickup.clientOf(ticket),
@@ -165,7 +179,10 @@ function projectFields(env) {
     name: env.AIRTABLE_PROJECT_NAME_FIELD || "Company Name",
     status: env.AIRTABLE_PROJECT_STATUS_FIELD || "Project Status",
     service: env.AIRTABLE_PROJECT_SERVICE_FIELD || "Service",
+    start: env.AIRTABLE_PROJECT_START_FIELD || "1️⃣ Project Start",
+    kickoff: env.AIRTABLE_PROJECT_KICKOFF_FIELD || "2️⃣ Kickoff Call",
     implementation: env.AIRTABLE_PROJECT_IMPLEMENTATION_FIELD || "5️⃣ Implementation",
+    walkthrough: env.AIRTABLE_PROJECT_WALKTHROUGH_FIELD || "6️⃣ Walkthrough Call",
     supportEnd: env.AIRTABLE_PROJECT_SUPPORT_END_FIELD || "Support End",
     ongoingValue: env.AIRTABLE_PROJECT_ONGOING_VALUE || "Ongoing Support",
   };
@@ -173,8 +190,9 @@ function projectFields(env) {
 
 function clientProjects({ projectRows, workTasks, env, today }) {
   if (projectRows?.length) {
+    // No slice: the Clients timeline plots every active engagement, and the
+    // card that only wants a handful takes its own top few.
     return projectRows
-      .slice(0, 5)
       .map((entry) =>
         entry.source === "airtable" ? airtableProject(entry, today) : supabaseProject(entry.row, env),
       );
@@ -220,6 +238,10 @@ function airtableProject({ fields, field }, today) {
   const service = airtable.toText(fields[field.service]);
   const implementation = String(fields[field.implementation] || "").slice(0, 10);
   const supportEnd = String(fields[field.supportEnd] || "").slice(0, 10);
+  const date = (key) => String(fields[field[key]] || "").slice(0, 10);
+  const kickoff = date("kickoff") || date("start");
+  const walkthrough = date("walkthrough");
+
   return {
     name: airtable.toText(fields[field.name]) || "Unnamed",
     phase: service,
@@ -232,7 +254,23 @@ function airtableProject({ fields, field }, today) {
     }),
     // Emoji in the Airtable status would collide with the card's own pill.
     note: status.replace(/[^\x00-\x7F]/g, "").trim(),
+    // The milestone dates the Clients timeline draws.
+    milestones: { kickoff, implementation, walkthrough, supportEnd },
+    // A retainer has no build milestones to plot — it just runs — so the
+    // timeline lists those separately instead of drawing nine identical bars.
+    retainer: isRetainer(service, status, field),
   };
+}
+
+/**
+ * Ops Maintenance and Systems Lifeline are open-ended engagements. So is
+ * anything whose Airtable status is the configured "ongoing" value once its
+ * build dates are behind it.
+ */
+function isRetainer(service, status, field) {
+  const name = String(service).toLowerCase();
+  if (name.includes("maintenance") || name.includes("lifeline") || name.includes("retainer")) return true;
+  return String(status).toLowerCase().includes(String(field.ongoingValue).toLowerCase()) && !name.includes("glow up") && !name.includes("sprint");
 }
 
 function supabaseProject(row, env) {

@@ -122,3 +122,107 @@ export async function handleBillPaidThrough(request, env, recordId) {
   await airtable.updateRecord(env, baseId, table, recordId, { [BILLS_PAID_FIELD(env)]: paidThrough });
   return json({ ok: true, paidThrough });
 }
+
+/**
+ * POST /api/money/invoices — add an expected payment.
+ *
+ * Summary on Invoice Tracking is a formula off the linked service record, so
+ * the dashboard cannot set it. The client name goes in Notes, which is the one
+ * free-text column, and the read side falls back to it — so a row added here
+ * shows the right name on the card even before anyone links it to a service.
+ */
+export async function handleCreateInvoice(request, env) {
+  const body = await request.json().catch(() => ({}));
+
+  const client = typeof body.client === "string" ? body.client.trim() : "";
+  if (!client) return badRequest("Who is the payment from?");
+  if (client.length > 120) return badRequest("That name is too long");
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return badRequest("Enter an amount greater than zero");
+
+  let due;
+  try {
+    due = normalizeDate(body.due ?? null);
+  } catch (err) {
+    return badRequest(err.message);
+  }
+
+  if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_INVOICE_TABLE) {
+    throw new ConfigError("the invoice table is not set");
+  }
+
+  const created = await airtable.createRecord(env, env.AIRTABLE_MONEY_BASE_ID, env.AIRTABLE_INVOICE_TABLE, {
+    [env.AIRTABLE_INVOICE_NOTES_FIELD || "Notes"]: client,
+    [env.AIRTABLE_INVOICE_AMOUNT_FIELD || "Payment Amount"]: amount,
+    [INVOICE_DUE_FIELD(env)]: due,
+    [INVOICE_STATUS_FIELD(env)]: "In progress",
+  });
+
+  return json({ ok: true, id: created.id, client, amount, due });
+}
+
+/**
+ * POST /api/money/bills — add a recurring item.
+ *
+ * Recurring Items are rules, so a bill needs a frequency and the anchor that
+ * frequency reads: a day of the month, a weekday, or an exact date. Sending the
+ * wrong anchor for the frequency is the easy mistake, so it is checked here
+ * rather than left to produce a rule that silently never fires.
+ */
+export async function handleCreateBill(request, env) {
+  const body = await request.json().catch(() => ({}));
+
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) return badRequest("Give the bill a name");
+  if (name.length > 120) return badRequest("That name is too long");
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return badRequest("Enter an amount greater than zero");
+
+  const frequency = typeof body.frequency === "string" ? body.frequency.trim() : "";
+  const allowed = ["Monthly", "Weekly", "Every 2 Weeks", "Quarterly", "One-time"];
+  const resolved = allowed.find((option) => option.toLowerCase() === frequency.toLowerCase());
+  if (!resolved) return badRequest(`Frequency must be one of: ${allowed.join(", ")}`);
+
+  const fields = {
+    [env.AIRTABLE_BILLS_NAME_FIELD || "Name"]: name,
+    [env.AIRTABLE_BILLS_AMOUNT_FIELD || "Amount"]: amount,
+    [env.AIRTABLE_BILLS_TYPE_FIELD || "Type"]: "Expense",
+    [env.AIRTABLE_BILLS_FREQUENCY_FIELD || "Frequency"]: resolved,
+    [env.AIRTABLE_BILLS_ACTIVE_FIELD || "Active"]: true,
+  };
+  if (body.book) fields[env.AIRTABLE_BILLS_BOOK_FIELD || "Book"] = String(body.book);
+
+  if (resolved === "Monthly" || resolved === "Quarterly") {
+    const day = Number(body.dayOfMonth);
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+      return badRequest(`A ${resolved.toLowerCase()} bill needs a day of the month between 1 and 31`);
+    }
+    fields[env.AIRTABLE_BILLS_DAY_FIELD || "Day of Month"] = day;
+  }
+  if (resolved === "Weekly") {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const weekday = days.find((day) => day.toLowerCase() === String(body.weekday || "").toLowerCase());
+    if (!weekday) return badRequest(`A weekly bill needs a weekday: ${days.join(", ")}`);
+    fields[env.AIRTABLE_BILLS_WEEKDAY_FIELD || "Weekday"] = weekday;
+  }
+  if (resolved === "Every 2 Weeks" || resolved === "One-time" || resolved === "Quarterly") {
+    let anchor;
+    try {
+      anchor = normalizeDate(body.anchor ?? null);
+    } catch (err) {
+      return badRequest(err.message);
+    }
+    if (!anchor && resolved !== "Quarterly") {
+      return badRequest(`A ${resolved.toLowerCase()} bill needs a date to count from`);
+    }
+    if (anchor) fields[env.AIRTABLE_BILLS_ANCHOR_FIELD || "Anchor or One-Time Date"] = anchor;
+  }
+
+  if (!env.AIRTABLE_BILLS_BASE_ID || !env.AIRTABLE_BILLS_TABLE) {
+    throw new ConfigError("the recurring items table is not set");
+  }
+  const created = await airtable.createRecord(env, env.AIRTABLE_BILLS_BASE_ID, env.AIRTABLE_BILLS_TABLE, fields);
+  return json({ ok: true, id: created.id, name, amount, frequency: resolved });
+}

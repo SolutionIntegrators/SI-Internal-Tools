@@ -112,3 +112,48 @@ test("bills stay read-only when there is no column to record a payment in", asyn
     /nowhere to record a paid bill/,
   );
 });
+
+test("adding a payment refuses an empty client, a bad amount, or a bad date", async () => {
+  const { handleCreateInvoice } = await import("../src/routes/moneyEdits.js");
+  for (const [body, pattern] of [
+    [{ amount: 100, due: "2026-09-01" }, /who is the payment from/i],
+    [{ client: "  ", amount: 100 }, /who is the payment from/i],
+    [{ client: "Acme", amount: 0 }, /greater than zero/i],
+    [{ client: "Acme", amount: "not a number" }, /greater than zero/i],
+    [{ client: "Acme", amount: -50 }, /greater than zero/i],
+    [{ client: "Acme", amount: 100, due: "01/09/2026" }, /YYYY-MM-DD/],
+  ]) {
+    const response = await handleCreateInvoice(post(body), env);
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.match((await response.json()).error, pattern);
+  }
+});
+
+test("a new bill must carry the anchor its frequency actually reads", async () => {
+  const { handleCreateBill } = await import("../src/routes/moneyEdits.js");
+  const base = { name: "Adobe", amount: 60 };
+
+  const noFreq = await handleCreateBill(post(base), env);
+  assert.equal(noFreq.status, 400);
+  assert.match((await noFreq.json()).error, /Frequency must be one of/);
+
+  // Monthly without a day would produce a rule that never fires.
+  const monthlyNoDay = await handleCreateBill(post({ ...base, frequency: "Monthly" }), env);
+  assert.equal(monthlyNoDay.status, 400);
+  assert.match((await monthlyNoDay.json()).error, /day of the month/);
+
+  const badDay = await handleCreateBill(post({ ...base, frequency: "Monthly", dayOfMonth: 32 }), env);
+  assert.equal(badDay.status, 400);
+
+  const weeklyNoDay = await handleCreateBill(post({ ...base, frequency: "Weekly" }), env);
+  assert.equal(weeklyNoDay.status, 400);
+  assert.match((await weeklyNoDay.json()).error, /weekday/);
+
+  const onceNoDate = await handleCreateBill(post({ ...base, frequency: "One-time" }), env);
+  assert.equal(onceNoDate.status, 400);
+  assert.match((await onceNoDate.json()).error, /date to count from/);
+
+  const noName = await handleCreateBill(post({ amount: 60, frequency: "Monthly", dayOfMonth: 1 }), env);
+  assert.equal(noName.status, 400);
+  assert.match((await noName.json()).error, /name/i);
+});
