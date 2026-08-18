@@ -10,6 +10,7 @@ import {
   revenueNote,
   splitCalendar,
   contentStage,
+  isClosed,
 } from "../src/lib/filters.js";
 import { billsDueSoon } from "../src/routes/money.js";
 import { projectHealth } from "../src/routes/tasks.js";
@@ -203,4 +204,17 @@ test("project health comes from dates, since Project Status never says 'in troub
   );
   // Missing dates fall back to on_track rather than inventing a problem.
   assert.equal(projectHealth({ ...base, status: "Execution", implementation: "", supportEnd: "" }), "on_track");
+});
+
+test("a resolved support ticket counts as closed", () => {
+  // Client Support Requests finishes tickets as "resolved", which ClickUp does
+  // not type as closed. Left out of CLOSED_STATUSES it made the open-ticket
+  // count read ~100 when only 8 were genuinely open.
+  const env = { CLOSED_STATUSES: "complete,closed,done,cancelled,canceled,resolved" };
+  const ticket = (status, type) => ({ status: { status, type } });
+
+  assert.equal(isClosed(ticket("resolved", "custom"), env), true);
+  assert.equal(isClosed(ticket("Resolved", "custom"), env), true, "matching is case-insensitive");
+  assert.equal(isClosed(ticket("new", "custom"), env), false);
+  assert.equal(isClosed(ticket("request additional info", "custom"), env), false, "still waiting on the client");
 });

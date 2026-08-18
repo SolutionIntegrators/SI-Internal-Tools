@@ -50,7 +50,10 @@ CLICKUP_SUPPORT_FOLDER_IDS = ""
 # Only needed if the API token belongs to someone other than Ashley.
 CLICKUP_USER_ID = ""
 READY_FOR_REVIEW_STATUSES = "ready for review,in review,review"
-CLOSED_STATUSES = "complete,closed,done,cancelled,canceled"
+# "resolved" is what Client Support Requests uses for a finished ticket, and
+# ClickUp does not type it as closed — without it here every resolved ticket
+# counted as open and the ticket number read ~100 instead of 8.
+CLOSED_STATUSES = "complete,closed,done,cancelled,canceled,resolved"
 
 # --- Google Calendar (on) -----------------------------------------------------
 # This flag is only half the switch: the section also needs all three GOOGLE_
