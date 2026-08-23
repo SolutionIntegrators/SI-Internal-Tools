@@ -140,3 +140,40 @@ test("editing a budget rejects junk before it reaches Airtable", async () => {
   assert.equal(typo.status, 400);
   assert.match((await typo.json()).error, /typo/);
 });
+
+test("editing a budget's notes works independently of its amount", async () => {
+  const { handleSetBudget } = await import("../src/routes/moneyEdits.js");
+  const env = { AIRTABLE_MONEY_BASE_ID: "appfVpfMqptf35xRa", AIRTABLE_BUDGETS_TABLE: "Category Budgets" };
+  const post = (body) => new Request("https://x/", { method: "POST", body: JSON.stringify(body) });
+
+  const nothing = await handleSetBudget(post({}), env, "rec1Wk3YRvfZxaV1n");
+  assert.equal(nothing.status, 400);
+  assert.match((await nothing.json()).error, /nothing to update/i);
+
+  const tooLong = await handleSetBudget(post({ notes: "x".repeat(2001) }), env, "rec1Wk3YRvfZxaV1n");
+  assert.equal(tooLong.status, 400);
+});
+
+test("a debt edit needs at least one field, and rejects an out-of-range amount", async () => {
+  const { handleSetDebt } = await import("../src/routes/moneyEdits.js");
+  const env = { AIRTABLE_MONEY_BASE_ID: "appfVpfMqptf35xRa", AIRTABLE_DEBTS_TABLE: "Debts" };
+  const post = (body) => new Request("https://x/", { method: "POST", body: JSON.stringify(body) });
+
+  const nothing = await handleSetDebt(post({}), env, "rec7uBnLaoaKPgOyA");
+  assert.equal(nothing.status, 400);
+  assert.match((await nothing.json()).error, /nothing to update/i);
+
+  const negative = await handleSetDebt(post({ currentBalance: -1 }), env, "rec7uBnLaoaKPgOyA");
+  assert.equal(negative.status, 400);
+  assert.match((await negative.json()).error, /zero or more/);
+
+  const typo = await handleSetDebt(post({ startingBalance: 99999999 }), env, "rec7uBnLaoaKPgOyA");
+  assert.equal(typo.status, 400);
+  assert.match((await typo.json()).error, /typo/);
+
+  const badDate = await handleSetDebt(post({ asOf: "not-a-date" }), env, "rec7uBnLaoaKPgOyA");
+  assert.equal(badDate.status, 400);
+
+  const badId = await handleSetDebt(post({ currentBalance: 100 }), env, "nope");
+  assert.equal(badId.status, 400);
+});

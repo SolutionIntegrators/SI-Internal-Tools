@@ -14,25 +14,8 @@ import * as clickup from "../services/clickup.js";
 import * as google from "../services/google.js";
 import * as airtable from "../services/airtable.js";
 import { calendarConfigured } from "./calendar.js";
+import { projectFields, milestoneList } from "../lib/projectFields.js";
 import { billsDueSoon } from "./money.js";
-
-/** The project dates that mean a client is expecting something on that day. */
-function milestoneFields(env) {
-  const configured = env.AIRTABLE_PROJECT_MILESTONE_FIELDS;
-  if (configured) {
-    return configured
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map((field) => ({ field, label: field.replace(/^[^\w]+\s*/, "") }));
-  }
-  return [
-    { field: "2️⃣ Kickoff Call", label: "Kickoff Call" },
-    { field: "5️⃣ Implementation", label: "Implementation" },
-    { field: "6️⃣ Walkthrough Call", label: "Walkthrough" },
-    { field: "Support End", label: "Support ends" },
-  ];
-}
 
 export async function handleMonth(env, ctx, url) {
   const tz = env.TIMEZONE;
@@ -67,6 +50,9 @@ export async function handleMonth(env, ctx, url) {
       .map((type) => type.trim())
       .filter(Boolean),
     canCreate: Boolean(env.CLICKUP_CONTENT_LIST_ID),
+    // Same rule Money uses: no column to record a payment in means the bills
+    // on this grid render read-only rather than a control that always fails.
+    billsWritable: Boolean(env.AIRTABLE_BILLS_PAID_THROUGH_FIELD),
     warnings,
   };
 
@@ -112,7 +98,7 @@ async function fetchContent(env, tz, grid) {
 
 async function fetchMilestones(env, grid) {
   if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_PROJECTS_TABLE) return [];
-  const nameField = env.AIRTABLE_PROJECT_NAME_FIELD || "Company Name";
+  const nameField = projectFields(env).name;
   const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, env.AIRTABLE_PROJECTS_TABLE, {
     maxRecords: 100,
   });
@@ -120,10 +106,13 @@ async function fetchMilestones(env, grid) {
   const items = [];
   for (const record of records) {
     const client = airtable.toText(record.fields?.[nameField]) || "Unnamed";
-    for (const { field, label } of milestoneFields(env)) {
+    for (const { key, field, label } of milestoneList(env)) {
       const date = String(record.fields?.[field] || "").slice(0, 10);
       if (!date || date < grid.gridStart || date > grid.gridEnd) continue;
-      items.push({ kind: "milestone", date, title: label, meta: client, id: `${record.id}:${field}` });
+      // "|" rather than ":" — Airtable record ids are alphanumeric, but some
+      // Airtable field names carry colon-like punctuation, and a milestone
+      // write needs to split this back apart cleanly.
+      items.push({ kind: "milestone", date, title: label, meta: client, id: `${record.id}|${key}` });
     }
   }
   return items;

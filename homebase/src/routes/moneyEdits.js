@@ -238,9 +238,24 @@ export async function handleSetBudget(request, env, recordId) {
   if (!validRecordId(recordId)) return badRequest("Bad budget id");
   const body = await request.json().catch(() => ({}));
 
-  const amount = Number(body.amount);
-  if (!Number.isFinite(amount) || amount < 0) return badRequest("Enter an amount of zero or more");
-  if (amount > 1000000) return badRequest("That looks like a typo — budgets cap at $1,000,000");
+  // Either field can move on its own — tapping the amount should not force a
+  // note, and updating the note should not require retyping the amount.
+  const hasAmount = body.amount !== undefined;
+  const hasNotes = body.notes !== undefined;
+  if (!hasAmount && !hasNotes) return badRequest("Nothing to update");
+
+  let amount;
+  if (hasAmount) {
+    amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount < 0) return badRequest("Enter an amount of zero or more");
+    if (amount > 1000000) return badRequest("That looks like a typo — budgets cap at $1,000,000");
+  }
+
+  let notes;
+  if (hasNotes) {
+    notes = String(body.notes ?? "");
+    if (notes.length > 2000) return badRequest("Notes are capped at 2000 characters");
+  }
 
   if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_BUDGETS_TABLE) {
     throw new ConfigError("the category budgets table is not set");
@@ -249,15 +264,92 @@ export async function handleSetBudget(request, env, recordId) {
   const baseId = env.AIRTABLE_MONEY_BASE_ID;
   const table = env.AIRTABLE_BUDGETS_TABLE;
   const amountField = env.AIRTABLE_BUDGET_AMOUNT_FIELD || "Monthly Budget";
+  const notesField = env.AIRTABLE_BUDGET_NOTES_FIELD || "Notes";
 
   const before = await airtable.getRecord(env, baseId, table, recordId);
   const previousAmount = Number(before?.fields?.[amountField]) || 0;
+  const previousNotes = String(before?.fields?.[notesField] || "");
 
-  await airtable.updateRecord(env, baseId, table, recordId, { [amountField]: amount });
+  const fields = {};
+  if (hasAmount) fields[amountField] = amount;
+  if (hasNotes) fields[notesField] = notes;
+  await airtable.updateRecord(env, baseId, table, recordId, fields);
+
   return json({
     ok: true,
-    amount,
+    amount: hasAmount ? amount : previousAmount,
     previousAmount,
+    notes: hasNotes ? notes : previousNotes,
+    previousNotes,
     category: airtable.toText(before?.fields?.[env.AIRTABLE_BUDGET_CATEGORY_FIELD || "Category"]),
   });
+}
+
+/**
+ * POST /api/money/debts/:id — fill in or update a debt's balances and payment.
+ *
+ * Every field is optional so a single field can be corrected without
+ * retyping the rest, but at least one has to change. Both balances are
+ * required together the first time a debt is set up, because a starting
+ * balance with no current balance (or the reverse) can't compute a percent
+ * paid off — debtRows() already treats that as "not tracked yet" and this
+ * mirrors the same rule rather than writing a half-set debt.
+ */
+export async function handleSetDebt(request, env, recordId) {
+  if (!validRecordId(recordId)) return badRequest("Bad debt id");
+  const body = await request.json().catch(() => ({}));
+
+  const parsed = {};
+  const parseAmount = (key, label) => {
+    if (body[key] === undefined) return;
+    const value = Number(body[key]);
+    if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be zero or more`);
+    if (value > 10000000) throw new Error(`${label} looks like a typo — debts cap at $10,000,000`);
+    parsed[key] = value;
+  };
+
+  let starting, current, payment, asOf;
+  try {
+    parseAmount("startingBalance", "Starting balance");
+    parseAmount("currentBalance", "Current balance");
+    parseAmount("monthlyPayment", "The monthly payment");
+    starting = parsed.startingBalance;
+    current = parsed.currentBalance;
+    payment = parsed.monthlyPayment;
+    if (body.asOf !== undefined) asOf = normalizeDate(body.asOf);
+  } catch (err) {
+    return badRequest(err.message);
+  }
+
+  const hasNotes = body.notes !== undefined;
+  const notes = hasNotes ? String(body.notes ?? "") : undefined;
+  if (hasNotes && notes.length > 2000) return badRequest("Notes are capped at 2000 characters");
+
+  if ([starting, current, payment, asOf, notes].every((value) => value === undefined)) {
+    return badRequest("Nothing to update");
+  }
+
+  if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_DEBTS_TABLE) {
+    throw new ConfigError("the debts table is not set");
+  }
+
+  const baseId = env.AIRTABLE_MONEY_BASE_ID;
+  const table = env.AIRTABLE_DEBTS_TABLE;
+  const field = {
+    start: env.AIRTABLE_DEBT_START_FIELD || "Starting Balance",
+    current: env.AIRTABLE_DEBT_CURRENT_FIELD || "Current Balance",
+    asOf: env.AIRTABLE_DEBT_ASOF_FIELD || "As Of Date",
+    payment: env.AIRTABLE_DEBT_PAYMENT_FIELD || "Monthly Payment",
+    notes: env.AIRTABLE_DEBT_NOTES_FIELD || "Notes",
+  };
+
+  const writeFields = {};
+  if (starting !== undefined) writeFields[field.start] = starting;
+  if (current !== undefined) writeFields[field.current] = current;
+  if (payment !== undefined) writeFields[field.payment] = payment;
+  if (asOf !== undefined) writeFields[field.asOf] = asOf;
+  if (notes !== undefined) writeFields[field.notes] = notes;
+
+  await airtable.updateRecord(env, baseId, table, recordId, writeFields);
+  return json({ ok: true, ...body });
 }

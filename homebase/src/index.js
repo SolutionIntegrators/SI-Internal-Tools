@@ -28,7 +28,9 @@ import {
   handleCreateInvoice,
   handleCreateBill,
   handleSetBudget,
+  handleSetDebt,
 } from "./routes/moneyEdits.js";
+import { handleSetMilestone } from "./routes/projectEdits.js";
 
 const CACHED = {
   tasks: cachedTasks,
@@ -119,6 +121,16 @@ async function route(request, env, ctx, url) {
   const budget = url.pathname.match(/^\/api\/money\/budgets\/([^/]+)$/);
   if (budget && request.method === "POST") {
     return handleSetBudget(request, env, decodeURIComponent(budget[1]));
+  }
+
+  const milestone = url.pathname.match(/^\/api\/clients\/milestones\/([^/]+)$/);
+  if (milestone && request.method === "POST") {
+    return handleSetMilestone(request, env, decodeURIComponent(milestone[1]));
+  }
+
+  const debt = url.pathname.match(/^\/api\/money\/debts\/([^/]+)$/);
+  if (debt && request.method === "POST") {
+    return handleSetDebt(request, env, decodeURIComponent(debt[1]));
   }
 
   const invoice = url.pathname.match(/^\/api\/money\/invoices\/([^/]+)\/(status|due)$/);

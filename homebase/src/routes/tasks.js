@@ -13,6 +13,7 @@ import {
   isClosed,
 } from "../lib/filters.js";
 import { readSnapshot, writeSnapshot } from "../lib/cache.js";
+import { projectFields } from "../lib/projectFields.js";
 
 function idList(value) {
   return (value || "")
@@ -174,19 +175,6 @@ async function fetchProjects(env) {
   return null;
 }
 
-function projectFields(env) {
-  return {
-    name: env.AIRTABLE_PROJECT_NAME_FIELD || "Company Name",
-    status: env.AIRTABLE_PROJECT_STATUS_FIELD || "Project Status",
-    service: env.AIRTABLE_PROJECT_SERVICE_FIELD || "Service",
-    start: env.AIRTABLE_PROJECT_START_FIELD || "1️⃣ Project Start",
-    kickoff: env.AIRTABLE_PROJECT_KICKOFF_FIELD || "2️⃣ Kickoff Call",
-    implementation: env.AIRTABLE_PROJECT_IMPLEMENTATION_FIELD || "5️⃣ Implementation",
-    walkthrough: env.AIRTABLE_PROJECT_WALKTHROUGH_FIELD || "6️⃣ Walkthrough Call",
-    supportEnd: env.AIRTABLE_PROJECT_SUPPORT_END_FIELD || "Support End",
-    ongoingValue: env.AIRTABLE_PROJECT_ONGOING_VALUE || "Ongoing Support",
-  };
-}
 
 function clientProjects({ projectRows, workTasks, env, today }) {
   if (projectRows?.length) {

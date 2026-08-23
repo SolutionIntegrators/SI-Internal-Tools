@@ -143,6 +143,21 @@ function taskRow(task, showDue) {
 }
 
 /**
+ * One open ClickUp ticket under its client group. The checkbox resolves it —
+ * gated behind a confirm, since a resolved ticket reads as "handled" to the
+ * client and a stray tap shouldn't say that.
+ */
+function ticketRow(t) {
+  return `<div class="row editable" data-task-row="${escapeHtml(t.id)}">
+    <input type="checkbox" class="task-check" data-complete-ticket="${escapeHtml(t.id)}" title="Mark resolved">
+    <div class="row-main">
+      <span class="row-title">${escapeHtml(t.title)}</span>
+      <div class="row-sub">${t.daysOpen ? `Open ${t.daysOpen} day${t.daysOpen === 1 ? "" : "s"}` : "Opened today"}${t.status ? " · " + escapeHtml(t.status) : ""}</div>
+    </div>
+  </div>`;
+}
+
+/**
  * An invoice from Invoice Tracking. The checkbox marks it Paid in Airtable and
  * the date opens a picker on the expected date — both behind a confirm, because
  * money is the one place where an accidental tap is expensive.
@@ -385,10 +400,15 @@ function budgetCard(budget) {
           ? '<div class="budget-cell muted">—</div>'
           : `<div class="budget-cell ${over ? "over" : "under"}">${money(row.actual)}<div class="card-sub" style="font-size:11px;">${escapeHtml(signedMoney(row.variance))}</div></div>`;
 
+      const noteHtml = row.id
+        ? `<button class="budget-note-edit${row.note ? "" : " empty"}" data-note-for="${escapeHtml(row.id)}" data-note-value="${escapeHtml(row.note || "")}" title="Edit note">${escapeHtml(row.note || "+ add a note")}</button>`
+        : "";
+
       body += `<div class="budget-row" data-budget-row="${escapeHtml(row.id || row.category)}">
         <div style="min-width:0;">
           <div class="budget-name" title="${escapeHtml(row.category)}">${escapeHtml(row.category)}</div>
           ${bar}
+          ${noteHtml}
         </div>
         <div class="budget-cell">${
           row.id
@@ -474,6 +494,62 @@ async function editBudget(button) {
   input.addEventListener("blur", save);
 }
 
+/** Swap the budget note for a textarea, and save on enter or blur. */
+async function editBudgetNotes(button) {
+  const id = button.dataset.noteFor;
+  const previous = button.dataset.noteValue || "";
+
+  const input = document.createElement("textarea");
+  input.className = "budget-note-input";
+  input.rows = 2;
+  input.maxLength = 2000;
+  input.value = previous;
+  input.placeholder = "Add a note...";
+  button.replaceWith(input);
+  input.focus();
+
+  let settled = false;
+  const restore = (notes) => {
+    if (settled) return;
+    settled = true;
+    button.textContent = notes || "+ add a note";
+    button.classList.toggle("empty", !notes);
+    button.dataset.noteValue = notes;
+    input.replaceWith(button);
+  };
+
+  const save = async () => {
+    if (settled) return;
+    const notes = input.value.trim();
+    if (notes === previous) return restore(previous);
+
+    settled = true;
+    input.disabled = true;
+    try {
+      await api(`/api/money/budgets/${encodeURIComponent(id)}`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      });
+      settled = false;
+      restore(notes);
+      showToast("Note saved in Airtable.", { ms: 4000 });
+    } catch (err) {
+      settled = false;
+      restore(previous);
+      showToast(`Couldn't save that note: ${err.message}`, { error: true });
+    }
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      save();
+    }
+    if (event.key === "Escape") restore(previous);
+  });
+  input.addEventListener("blur", save);
+}
+
 async function revertBudget(id, amount) {
   try {
     await api(`/api/money/budgets/${encodeURIComponent(id)}`, {
@@ -505,6 +581,8 @@ function debtCard(debts) {
     </div>`;
 
   for (const debt of debts) {
+    const editAttrs = `data-debt-edit="${escapeHtml(debt.id)}" data-start="${debt.start || ""}" data-current="${debt.current || ""}" data-payment="${debt.payment || ""}" data-asof="${escapeHtml(debt.asOf || "")}" data-name="${escapeHtml(debt.name)}"`;
+
     if (debt.needsSetup) {
       // No balance means no honest progress bar — ask for one instead of
       // drawing a bar against a number nobody has entered.
@@ -513,7 +591,9 @@ function debtCard(debts) {
           <span class="debt-name">${escapeHtml(debt.name)}</span>
           <span class="card-sub">${debt.payment ? `${money(debt.payment)}/mo` : "no payment set"}</span>
         </div>
-        <div class="row-sub" style="margin-top:6px;">Add a starting and current balance in Airtable to track progress.</div>
+        <div class="row-sub" style="margin-top:6px;">Add a starting and current balance to track progress.
+          <button class="due-control" ${editAttrs}>Add balances</button>
+        </div>
       </div>`;
       continue;
     }
@@ -526,12 +606,71 @@ function debtCard(debts) {
       <div class="debt-bar"><span style="width:${debt.percent}%"></span></div>
       <div class="row-sub">${money(debt.paidOff)} paid off of ${money(debt.start)} · ${debt.percent}%${
         debt.monthsLeft ? ` · ~${debt.monthsLeft} month${debt.monthsLeft === 1 ? "" : "s"} at ${money(debt.payment)}/mo` : ""
-      }${debt.asOf ? ` · as of ${escapeHtml(debt.asOf)}` : ""}</div>
+      }${debt.asOf ? ` · as of ${escapeHtml(debt.asOf)}` : ""} · <button class="due-control" ${editAttrs}>Edit</button></div>
     </div>`;
   }
 
   card.innerHTML = body;
   return card;
+}
+
+/**
+ * An inline form for a debt's balances, payment, and as-of date — mounted
+ * right in the row rather than swapping one field at a time, since these
+ * four numbers are usually filled in or corrected together.
+ */
+async function editDebt(button) {
+  document.querySelector(".add-form")?.remove();
+  const id = button.dataset.debtEdit;
+  const row = button.closest(".debt-row");
+
+  const form = document.createElement("form");
+  form.className = "add-form";
+  form.innerHTML = `<div class="add-form-row">
+      <div><label class="card-sub" style="display:block;margin-bottom:4px;">Starting balance</label>
+        <input name="startingBalance" type="number" step="0.01" min="0" value="${escapeHtml(button.dataset.start || "")}"></div>
+      <div><label class="card-sub" style="display:block;margin-bottom:4px;">Current balance</label>
+        <input name="currentBalance" type="number" step="0.01" min="0" value="${escapeHtml(button.dataset.current || "")}"></div>
+      <div><label class="card-sub" style="display:block;margin-bottom:4px;">Monthly payment</label>
+        <input name="monthlyPayment" type="number" step="0.01" min="0" value="${escapeHtml(button.dataset.payment || "")}"></div>
+      <div><label class="card-sub" style="display:block;margin-bottom:4px;">As of</label>
+        <input name="asOf" type="date" value="${escapeHtml(button.dataset.asof || "")}"></div>
+    </div>
+    <div class="field-error" hidden></div>
+    <div class="add-form-actions">
+      <button type="submit" class="primary">Save</button>
+      <button type="button" data-cancel-add="1">Cancel</button>
+    </div>`;
+  row.appendChild(form);
+  form.querySelector("input")?.focus();
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(form).entries());
+    for (const key of Object.keys(values)) if (values[key] === "") delete values[key];
+
+    const submit = form.querySelector("button[type=submit]");
+    const error = form.querySelector(".field-error");
+    if (!Object.keys(values).length) return form.remove();
+
+    const ok = await confirmAction(`Save these changes to ${button.dataset.name || "this debt"} in Airtable?`, "Save");
+    if (!ok) return;
+
+    submit.disabled = true;
+    submit.textContent = "Saving...";
+    error.hidden = true;
+    try {
+      await api(`/api/money/debts/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(values) });
+      form.remove();
+      showToast("Debt updated in Airtable.", { ms: 5000 });
+      loadSection("money");
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+      submit.disabled = false;
+      submit.textContent = "Save";
+    }
+  });
 }
 
 function moneyCard({ title, sub, addKey, rows, empty }) {
@@ -641,7 +780,7 @@ function renderWork() {
                 <span class="row-title">${escapeHtml(g.client)}</span>
                 <span class="ticket-count${g.count > 1 ? " hot" : ""}">${g.count}</span>
               </div>
-              <div class="row-sub">${g.oldestDays ? `Oldest open ${g.oldestDays} day${g.oldestDays === 1 ? "" : "s"}` : "Opened today"}${g.titles && g.titles.length ? " · " + escapeHtml(g.titles.slice(0, 2).join(", ")) : ""}</div>
+              ${(g.tickets || []).map((t) => ticketRow(t)).join("")}
             </div>`,
           )
           .join("")
@@ -1210,6 +1349,76 @@ async function editInvoiceDue(button) {
   input.addEventListener("blur", save);
 }
 
+/**
+ * Move one of a project's four milestone dates. Unlike a task's due date or an
+ * invoice's expected date, a milestone can be moved but not cleared — there is
+ * no "no kickoff date" state that means anything — so the backend rejects an
+ * empty value and this never offers to clear the field.
+ */
+async function editMilestone(button) {
+  const recordId = button.dataset.milestoneFor;
+  const key = button.dataset.milestoneKey;
+  const current = button.dataset.dueValue || "";
+
+  const input = document.createElement("input");
+  input.type = "date";
+  input.className = "due-input";
+  input.value = current;
+  button.replaceWith(input);
+  input.focus();
+  if (input.showPicker) {
+    try {
+      input.showPicker();
+    } catch {
+      /* not allowed in this context; the field is still usable */
+    }
+  }
+
+  let settled = false;
+  const restore = (value) => {
+    if (settled) return;
+    settled = true;
+    button.textContent = value;
+    button.dataset.dueValue = value;
+    input.replaceWith(button);
+  };
+
+  const save = async () => {
+    if (settled) return;
+    const value = input.value;
+    if (!value || value === current) return restore(current);
+
+    settled = true;
+    input.disabled = true;
+    const ok = await confirmAction(`Move this to ${value} in Airtable?`, "Move it");
+    if (!ok) {
+      settled = false;
+      return restore(current);
+    }
+
+    try {
+      await api(`/api/clients/milestones/${encodeURIComponent(recordId)}`, {
+        method: "POST",
+        body: JSON.stringify({ key, date: value }),
+      });
+      settled = false;
+      restore(value);
+      showToast("Milestone updated in Airtable.", { ms: 4000 });
+      // The item may now belong on a different day than the one open, so the
+      // whole window is reloaded rather than patching this one row in place.
+      if (monthData) loadMonth(calAnchor);
+      loadSection("tasks"); // the Clients timeline reads the same records
+    } catch (err) {
+      settled = false;
+      restore(current);
+      showToast(`Couldn't move that: ${err.message}`, { error: true });
+    }
+  };
+
+  input.addEventListener("change", save);
+  input.addEventListener("blur", save);
+}
+
 async function completeTask(taskId, checkbox) {
   const row = rowFor(taskId);
   checkbox.disabled = true;
@@ -1230,6 +1439,15 @@ async function completeTask(taskId, checkbox) {
     row?.classList.remove("saving");
     showToast(`Couldn't complete that: ${err.message}`, { error: true });
   }
+}
+
+async function completeTicket(taskId, checkbox) {
+  const ok = await confirmAction("Mark this ticket resolved in ClickUp?", "Mark resolved");
+  if (!ok) {
+    checkbox.checked = false;
+    return;
+  }
+  await completeTask(taskId, checkbox);
 }
 
 async function reopenTask(taskId, previousStatus) {
@@ -1555,23 +1773,106 @@ function relativeDayLabel(date) {
   return long;
 }
 
-/** The full list for one day — the thing a grid cell cannot show. */
+/**
+ * The full list for one day — the thing a grid cell cannot show. Each kind
+ * gets the control it can actually act on: content and payments can be
+ * completed and rescheduled, milestones and bills can be moved or paid,
+ * calendar events stay read-only because there is no write path to Google.
+ */
 function dayEntries(date) {
   const items = dayItems(date);
   if (!items.length) return '<div class="empty-row">Nothing on this day.</div>';
+  return items.map(dayEntryMarkup).join("");
+}
 
-  return items
-    .map((item) => {
-      const kind = KIND_LABELS[item.kind] || item.kind || "";
-      return `<div class="day-entry">
-        <div class="day-entry-mark cal-item-${escapeHtml(item.kind)}" style="background:currentColor;"></div>
-        <div class="day-entry-body">
-          <div class="day-entry-title">${escapeHtml(item.title)}</div>
-          <div class="day-entry-meta">${escapeHtml([kind, item.meta].filter(Boolean).join(" · "))}</div>
-        </div>
-      </div>`;
-    })
-    .join("");
+const ENTRY_BUILDERS = {
+  content: contentEntry,
+  milestone: milestoneEntry,
+  payment: paymentEntry,
+  bill: billEntry,
+};
+
+function dayEntryMarkup(item) {
+  const builder = ENTRY_BUILDERS[item.kind];
+  return builder ? builder(item) : plainEntry(item);
+}
+
+function entryShell(item, controlsHtml) {
+  const kind = KIND_LABELS[item.kind] || item.kind || "";
+  return `<div class="day-entry" data-day-entry="${escapeHtml(item.kind)}:${escapeHtml(item.id ?? "")}">
+    <div class="day-entry-mark cal-item-${escapeHtml(item.kind)}" style="background:currentColor;"></div>
+    ${controlsHtml || ""}
+    <div class="day-entry-body">
+      <div class="day-entry-title">${escapeHtml(item.title)}</div>
+      <div class="day-entry-meta">${escapeHtml([kind, item.meta].filter(Boolean).join(" · "))}</div>
+    </div>
+  </div>`;
+}
+
+/** Calendar events (Google) have no write path — read-only, as they always were. */
+function plainEntry(item) {
+  return entryShell(item, "");
+}
+
+/** A Content Management task: complete it, or move its due date. */
+function contentEntry(item) {
+  if (!item.id) return plainEntry(item);
+  const kind = KIND_LABELS.content;
+  const due = `due <button class="due-control" data-due-for="${escapeHtml(item.id)}" data-due-value="${escapeHtml(item.date || "")}">${escapeHtml(item.date || "")}</button>`;
+  return `<div class="day-entry" data-task-row="${escapeHtml(item.id)}">
+    <div class="day-entry-mark cal-item-content" style="background:currentColor;"></div>
+    <input type="checkbox" class="task-check" data-complete="${escapeHtml(item.id)}" title="Mark complete">
+    <div class="day-entry-body">
+      <div class="day-entry-title">${escapeHtml(item.title)}</div>
+      <div class="day-entry-meta">${escapeHtml([kind, item.stage, item.platform].filter(Boolean).join(" · "))} · ${due}</div>
+    </div>
+  </div>`;
+}
+
+/** A project milestone date. Moving it writes straight to ALL Active Projects. */
+function milestoneEntry(item) {
+  const [recordId, key] = String(item.id || "").split("|");
+  if (!recordId || !key) return plainEntry(item);
+  const kind = KIND_LABELS.milestone;
+  return `<div class="day-entry" data-milestone-row="${escapeHtml(recordId)}:${escapeHtml(key)}">
+    <div class="day-entry-mark cal-item-milestone" style="background:currentColor;"></div>
+    <div class="day-entry-body">
+      <div class="day-entry-title">${escapeHtml(item.title)}</div>
+      <div class="day-entry-meta">${escapeHtml([kind, item.meta].filter(Boolean).join(" · "))} · <button class="due-control" data-milestone-for="${escapeHtml(recordId)}" data-milestone-key="${escapeHtml(key)}" data-due-value="${escapeHtml(item.date || "")}">${escapeHtml(item.date || "")}</button></div>
+    </div>
+  </div>`;
+}
+
+/** An unpaid invoice: mark it received, or move its expected date. Same actions as the Money tab's Coming In card. */
+function paymentEntry(item) {
+  if (!item.id) return plainEntry(item);
+  const kind = KIND_LABELS.payment;
+  return `<div class="day-entry" data-money-row="invoice:${escapeHtml(item.id)}">
+    <div class="day-entry-mark cal-item-payment" style="background:currentColor;"></div>
+    <input type="checkbox" class="money-check" data-invoice-paid="${escapeHtml(item.id)}" data-label="${escapeHtml(item.title)}" data-amount="${escapeHtml(item.meta || "")}" title="Mark paid in Airtable">
+    <div class="day-entry-body">
+      <div class="day-entry-title">${escapeHtml(item.title)}</div>
+      <div class="day-entry-meta">${escapeHtml(kind)}${item.meta ? " · " + escapeHtml(item.meta) : ""} · expected <button class="due-control" data-invoice-due="${escapeHtml(item.id)}" data-due-value="${escapeHtml(item.date || "")}">${escapeHtml(item.date || "")}</button></div>
+    </div>
+  </div>`;
+}
+
+/**
+ * A bill occurrence. Recurring Items are rules rather than one row per
+ * payment, so checking one off records a Paid Through date on the rule —
+ * this occurrence disappears and next month's still arrives on schedule.
+ */
+function billEntry(item) {
+  if (!monthData.billsWritable || !item.billId) return plainEntry(item);
+  const kind = KIND_LABELS.bill;
+  return `<div class="day-entry" data-money-row="bill:${escapeHtml(item.billId)}:${escapeHtml(item.date)}">
+    <div class="day-entry-mark cal-item-bill" style="background:currentColor;"></div>
+    <input type="checkbox" class="money-check" data-bill-paid="${escapeHtml(item.billId)}" data-due="${escapeHtml(item.date)}" data-prev="${escapeHtml(item.paidThrough || "")}" data-label="${escapeHtml(item.title)}" data-amount="${escapeHtml(item.meta || "")}" title="Mark this bill paid">
+    <div class="day-entry-body">
+      <div class="day-entry-title">${escapeHtml(item.title)}</div>
+      <div class="day-entry-meta">${escapeHtml([kind, item.meta].filter(Boolean).join(" · "))}</div>
+    </div>
+  </div>`;
 }
 
 // ---------- Day flyout ----------
@@ -1765,14 +2066,18 @@ function scheduleRailItem(button) {
   input.addEventListener("blur", save);
 }
 
-const VIEW_IDS = { money: "moneyView", work: "workView", clients: "clientsView", calendar: "calendarView" };
+const VIEW_IDS = {
+  money: "moneyView",
+  work: "workView",
+  clients: "clientsView",
+  calendar: "calendarView",
+  chat: "chatCol",
+};
 
 function showView(view) {
   if (!VIEW_IDS[view]) view = "money";
   activeView = view;
   localStorage.setItem("homebase-view", view);
-  // The calendar and the client timeline both want the chat column's width.
-  document.body.classList.toggle("wide-mode", view === "calendar" || view === "clients");
 
   if (view !== "calendar") closeFlyout();
   for (const [name, id] of Object.entries(VIEW_IDS)) $(id).hidden = name !== view;
@@ -1784,6 +2089,9 @@ function showView(view) {
     loadMonth(calAnchor || isoDay(new Date()));
     return;
   }
+  // Chat is not one of the dashboard sub-views VIEWS renders — its content is
+  // static markup plus the chat history already appended to it.
+  if (view === "chat") return;
   render();
 }
 
@@ -1849,17 +2157,8 @@ function hideGate() {
 
 // ---------- Wiring ----------
 
-function showMobileTab(tab) {
-  $("dashboardCol").className = tab === "dashboard" ? "active-mobile" : "";
-  $("chatCol").className = tab === "chat" ? "active-mobile" : "";
-  $("tabDashBtn").className = "tab-btn" + (tab === "dashboard" ? " active" : "");
-  $("tabChatBtn").className = "tab-btn" + (tab === "chat" ? " active" : "");
-}
-
 $("refreshBtn").addEventListener("click", refresh);
 $("sendBtn").addEventListener("click", sendChat);
-$("tabDashBtn").addEventListener("click", () => showMobileTab("dashboard"));
-$("tabChatBtn").addEventListener("click", () => showMobileTab("chat"));
 
 $("chatInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
@@ -1923,7 +2222,10 @@ $("calendarView").addEventListener("click", (event) => {
   if (day) openFlyout(day.dataset.day);
 });
 
-// The flyout is appended to the body, so it needs its own delegate.
+// The flyout is appended to the body, so its controls need their own
+// delegate — the same actions the dashboard tabs use (complete a task, mark
+// an invoice paid, mark a bill paid, move a due date), plus moving a
+// milestone, which only ever appears here.
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".flyout")) return;
   if (event.target.closest("[data-close-flyout]")) return closeFlyout();
@@ -1937,7 +2239,24 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-cancel-add]") || event.target.dataset?.cancelCreate) {
     openCreateDate = null;
     document.querySelector(".cal-create")?.remove();
+    return;
   }
+
+  const dueButton = event.target.closest(".due-control");
+  if (dueButton) {
+    if (dueButton.dataset.milestoneFor) editMilestone(dueButton);
+    else if (dueButton.dataset.invoiceDue) editInvoiceDue(dueButton);
+    else editDueDate(dueButton);
+  }
+});
+
+document.addEventListener("change", (event) => {
+  if (!event.target.closest(".flyout")) return;
+  const checkbox = event.target.closest("input[type=checkbox]");
+  if (!checkbox || !checkbox.checked) return;
+  if (checkbox.dataset.complete) completeTask(checkbox.dataset.complete, checkbox);
+  else if (checkbox.dataset.invoicePaid) markInvoicePaid(checkbox);
+  else if (checkbox.dataset.billPaid) markBillPaid(checkbox);
 });
 
 // One delegated pair on the column, so every tab's controls work without each
@@ -1968,6 +2287,12 @@ $("dashboardCol").addEventListener("click", (event) => {
   const budgetButton = event.target.closest(".budget-edit");
   if (budgetButton) return editBudget(budgetButton);
 
+  const noteButton = event.target.closest(".budget-note-edit");
+  if (noteButton) return editBudgetNotes(noteButton);
+
+  const debtButton = event.target.closest("[data-debt-edit]");
+  if (debtButton) return editDebt(debtButton);
+
   const dueButton = event.target.closest(".due-control");
   if (!dueButton) return;
   if (dueButton.dataset.invoiceDue) editInvoiceDue(dueButton);
@@ -1978,6 +2303,7 @@ $("dashboardCol").addEventListener("change", (event) => {
   const checkbox = event.target.closest("input[type=checkbox]");
   if (!checkbox || !checkbox.checked) return;
   if (checkbox.dataset.complete) completeTask(checkbox.dataset.complete, checkbox);
+  else if (checkbox.dataset.completeTicket) completeTicket(checkbox.dataset.completeTicket, checkbox);
   else if (checkbox.dataset.invoicePaid) markInvoicePaid(checkbox);
   else if (checkbox.dataset.billPaid) markBillPaid(checkbox);
 });

@@ -68,7 +68,8 @@ test("urgent is read from ClickUp's priority, in either shape", () => {
 test("tickets roll up per client, busiest first", () => {
   // Titles on this list read "Client — what broke", which is the only place
   // the client name appears.
-  const ticket = (name, daysAgo) => ({
+  const ticket = (id, name, daysAgo) => ({
+    id,
     name,
     status: { status: "new", type: "custom" },
     date_created: String(NOW - daysAgo * DAY),
@@ -76,13 +77,13 @@ test("tickets roll up per client, busiest first", () => {
   });
   const { openCount, byClient } = selectTickets(
     [
-      ticket("Olivia Lawson Marketing — Empty stubs", 12),
-      ticket("Olivia Lawson Marketing — Claude output wrong field", 12),
-      ticket("Olivia Lawson Marketing — Active Project interface", 14),
-      ticket("Maven Marketing — Revision request", 1),
-      ticket("Miere Catering — Onboarding automation broke", 5),
-      ticket("Miere Catering — Invoice edits", 5),
-      { name: "No client prefix", status: { status: "new" }, date_created: String(NOW - DAY), list: { name: "Client Support Requests" } },
+      ticket("t1", "Olivia Lawson Marketing — Empty stubs", 12),
+      ticket("t2", "Olivia Lawson Marketing — Claude output wrong field", 12),
+      ticket("t3", "Olivia Lawson Marketing — Active Project interface", 14),
+      ticket("t4", "Maven Marketing — Revision request", 1),
+      ticket("t5", "Miere Catering — Onboarding automation broke", 5),
+      ticket("t6", "Miere Catering — Invoice edits", 5),
+      { id: "t7", name: "No client prefix", status: { status: "new" }, date_created: String(NOW - DAY), list: { name: "Client Support Requests" } },
     ],
     { now: NOW, env },
   );
@@ -96,6 +97,11 @@ test("tickets roll up per client, busiest first", () => {
   ]);
   assert.equal(byClient[0].oldestDays, 14, "the group carries its oldest ticket");
   assert.ok(byClient[0].titles.includes("Empty stubs"));
+  // A ticket needs its id to be acted on individually, not just counted.
+  assert.deepEqual(
+    byClient[0].tickets.map((t) => [t.id, t.title, t.daysOpen]),
+    [["t3", "Active Project interface", 14], ["t1", "Empty stubs", 12], ["t2", "Claude output wrong field", 12]],
+  );
 });
 
 test("due soon ignores other people's tasks and closed work", () => {

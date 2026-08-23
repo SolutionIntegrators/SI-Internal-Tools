@@ -87,6 +87,7 @@ AIRTABLE_PROJECTS_TABLE = "ALL Active Projects"
 AIRTABLE_SUMMARY_TABLE = "Solution Integrators Financial Summary"
 AIRTABLE_BUDGETS_TABLE = "Category Budgets"
 AIRTABLE_DEBTS_TABLE = "Debts"
+AIRTABLE_DEBT_NOTES_FIELD = "Notes"
 # Where this month's actual spend comes from. Deliberately empty: the Airtable
 # expense tables stopped being written to in 2023, and summing them would show
 # $0 against every budget — which reads as "under budget" rather than "not

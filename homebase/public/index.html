@@ -106,13 +106,6 @@
     max-width: 1280px;
     margin: 28px auto 60px;
     padding: 0 32px;
-    display: grid;
-    grid-template-columns: 1.6fr 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
   }
 
   .dashboard-grid { display: block; }
@@ -219,9 +212,10 @@
     box-shadow: 0 2px 10px rgba(30,30,30,0.05);
     display: flex;
     flex-direction: column;
-    height: 640px;
-    position: sticky;
-    top: 24px;
+    max-width: 760px;
+    margin: 0 auto;
+    height: calc(100vh - 260px);
+    min-height: 420px;
   }
   .chat-header {
     background: var(--denim-blue);
@@ -280,12 +274,6 @@
   }
   .send-btn:disabled { opacity: 0.5; cursor: default; }
 
-  .mobile-tabs { display: none; gap: 8px; padding: 0 32px; margin-top: 16px; }
-  @media (max-width: 900px) {
-    .mobile-tabs { display: flex; }
-    .layout > div { display: none; }
-    .layout > div.active-mobile { display: block; }
-  }
   .tab-btn {
     background: var(--white);
     color: var(--denim-blue);
@@ -391,7 +379,19 @@
   }
 
   /* ---- Calendar view ---- */
-  .view-switch { display: flex; gap: 6px; margin-bottom: 18px; }
+  .view-switch {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    /* Five tabs is one more than four comfortably wrap to on a narrow phone;
+       scrolling beats wrapping to a second row that pushes content down, and
+       beats overflowing the page, which this replaced. */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .view-switch::-webkit-scrollbar { display: none; }
+  .view-btn { flex: none; white-space: nowrap; }
   .view-btn {
     font-family: 'DM Sans', sans-serif;
     font-size: 13px;
@@ -407,14 +407,7 @@
   .view-btn.active { background: var(--denim-blue); border-color: var(--denim-blue); color: var(--white); }
 
   .calendar-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; align-items: start; }
-  /* The month grid and the client timeline both need the whole page — seven
-     calendar columns or three months of track inside the dashboard column alone
-     leaves each too narrow to read. Mobile is already single-column and
-     governed by the tabs, so leave it. */
-  @media (min-width: 901px) {
-    body.wide-mode .layout { grid-template-columns: minmax(0, 1fr); }
-    body.wide-mode #chatCol { display: none; }
-  }
+
   .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
   .cal-title { font-family: 'Fraunces', serif; font-size: 22px; color: var(--charcoal); }
   .cal-nav { display: flex; gap: 6px; }
@@ -819,6 +812,36 @@
     outline: none;
   }
 
+  .budget-note-edit {
+    display: block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11.5px;
+    color: #9a8f83;
+    background: none;
+    border: none;
+    padding: 3px 0 0;
+    cursor: pointer;
+    text-align: left;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .budget-note-edit.empty { font-style: italic; }
+  .budget-note-edit:hover { color: var(--burnt-orange); }
+  .budget-note-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    width: 100%;
+    max-width: 320px;
+    margin-top: 4px;
+    padding: 5px 7px;
+    border: 1px solid var(--burnt-orange);
+    border-radius: 4px;
+    outline: none;
+    resize: vertical;
+  }
+
   /* Told-you-plainly banner for a missing integration */
   .notice {
     display: flex;
@@ -839,6 +862,7 @@
   .debt-balance { font-family: Georgia, serif; font-size: 18px; font-variant-numeric: tabular-nums; }
   .debt-bar { background: var(--linen); height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 6px; }
   .debt-bar span { display: block; height: 100%; border-radius: 4px; background: #2f6b4a; }
+  .debt-row .add-form { margin-top: 10px; }
 
   @media (max-width: 900px) {
     .budget-row, .budget-head-row { grid-template-columns: minmax(0, 1fr) 78px 78px; gap: 8px; }
@@ -873,6 +897,11 @@
   .day-entry-body { flex: 1; min-width: 0; }
   .day-entry-title { font-size: 15px; line-height: 1.35; }
   .day-entry-meta { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #7d736a; margin-top: 3px; }
+  /* Same saving/done feedback the Money and Work tabs use for .row, so a
+     checkbox or due-date edit inside the flyout looks like it did something
+     rather than silently succeeding. */
+  .day-entry.saving { opacity: 0.5; }
+  .day-entry.done .day-entry-title { text-decoration: line-through; color: #999; }
   .day-kind {
     font-family: 'DM Sans', sans-serif;
     font-size: 10px;
@@ -1052,7 +1081,7 @@
   @media (max-width: 600px) {
     header { padding: 22px 18px 20px; }
     header h1 { font-size: 28px; }
-    .focus-banner, .layout, .mobile-tabs { padding-left: 18px; padding-right: 18px; }
+    .focus-banner, .layout { padding-left: 18px; padding-right: 18px; }
     .layout { margin-top: 22px; gap: 18px; }
     .focus-inner { padding: 16px 18px; }
     #focusText { font-size: 18px; }
@@ -1093,26 +1122,23 @@
   </div>
 </div>
 
-<div class="mobile-tabs">
-  <button class="tab-btn active" id="tabDashBtn">Dashboard</button>
-  <button class="tab-btn" id="tabChatBtn">Chat</button>
-</div>
-
 <div class="layout">
-  <div class="active-mobile" id="dashboardCol">
-    <div class="view-switch">
-      <button class="view-btn active" data-view="money" id="viewMoneyBtn">Money</button>
-      <button class="view-btn" data-view="work" id="viewWorkBtn">Work</button>
-      <button class="view-btn" data-view="clients" id="viewClientsBtn">Clients</button>
-      <button class="view-btn" data-view="calendar" id="viewCalBtn">Calendar</button>
-    </div>
+  <div class="view-switch">
+    <button class="view-btn active" data-view="money" id="viewMoneyBtn">Money</button>
+    <button class="view-btn" data-view="work" id="viewWorkBtn">Work</button>
+    <button class="view-btn" data-view="clients" id="viewClientsBtn">Clients</button>
+    <button class="view-btn" data-view="calendar" id="viewCalBtn">Calendar</button>
+    <button class="view-btn" data-view="chat" id="viewChatBtn">Chat</button>
+  </div>
+
+  <div id="dashboardCol">
     <div class="dashboard-grid" id="moneyView"></div>
     <div class="dashboard-grid" id="workView" hidden></div>
     <div class="dashboard-grid" id="clientsView" hidden></div>
     <div class="calendar-view" id="calendarView" hidden></div>
   </div>
 
-  <div id="chatCol">
+  <div id="chatCol" hidden>
     <div class="chat-panel">
       <div class="chat-header">
         <h2>Ask about your projects</h2>

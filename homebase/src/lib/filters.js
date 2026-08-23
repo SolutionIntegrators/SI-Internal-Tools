@@ -120,13 +120,18 @@ export function ticketsByClient(open, now) {
     const split = name.split(/\s+[—–|]\s+/);
     const client = (split.length > 1 ? split[0] : ticket.list?.name || "Unassigned").trim();
     const created = createdMs(ticket);
+    const daysOpen = created !== null ? daysSince(created, now) : 0;
+    const title = split.length > 1 ? split.slice(1).join(" — ").trim() : name;
 
-    const group = groups.get(client) || { client, count: 0, oldestDays: 0, titles: [] };
+    const group = groups.get(client) || { client, count: 0, oldestDays: 0, titles: [], tickets: [] };
     group.count += 1;
-    if (created !== null) group.oldestDays = Math.max(group.oldestDays, daysSince(created, now));
-    if (split.length > 1) group.titles.push(split.slice(1).join(" — ").trim());
+    group.oldestDays = Math.max(group.oldestDays, daysOpen);
+    if (split.length > 1) group.titles.push(title);
+    // Carried so a ticket can be acted on individually, not just counted.
+    group.tickets.push({ id: ticket.id, title, daysOpen, status: ticket.status?.status || null });
     groups.set(client, group);
   }
+  for (const group of groups.values()) group.tickets.sort((a, b) => b.daysOpen - a.daysOpen);
   return [...groups.values()].sort((a, b) => b.count - a.count || b.oldestDays - a.oldestDays);
 }
 
