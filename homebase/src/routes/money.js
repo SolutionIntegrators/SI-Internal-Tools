@@ -12,6 +12,8 @@ import { occurrencesInWindow } from "../lib/recurrence.js";
 import { revenueNote } from "../lib/filters.js";
 import { readSnapshot, writeSnapshot } from "../lib/cache.js";
 import { isSettled } from "../lib/moneyEdits.js";
+import { budgetRows, debtRows } from "../lib/budget.js";
+import { sumByCategory } from "../lib/categoryMap.js";
 
 // Invoices in these states are settled or abandoned — neither is money coming in.
 const CLOSED_INVOICE_STATUSES = ["paid", "project cancelled", "delete"];
@@ -24,12 +26,14 @@ export async function handleMoney(env, ctx) {
   const weekEnd = endOfWeek(now, tz); // Saturday
   const warnings = [];
 
-  const [collected, weeklyGoal, invoices, recurring, summary] = await Promise.all([
+  const [collected, weeklyGoal, invoices, recurring, summary, budget, debts] = await Promise.all([
     softly(warnings, "Revenue", fetchCollected(env, weekStart, today), []),
     softly(warnings, "Weekly goal", fetchWeeklyGoal(env, weekStart, weekEnd), null),
     softly(warnings, "Upcoming payments", fetchOpenInvoices(env, today), []),
     softly(warnings, "Bills", fetchRecurringExpenses(env), []),
     softly(warnings, "Month", fetchMonthSummary(env, now, tz), null),
+    softly(warnings, "Budget", fetchBudget(env, today), null),
+    softly(warnings, "Debts", fetchDebts(env), []),
   ]);
 
   const goal = weeklyGoal ?? Number(env.REVENUE_GOAL || 7500);
@@ -45,6 +49,8 @@ export async function handleMoney(env, ctx) {
     // set there rather than derived from the weekly one, and "projected" is
     // collected plus everything still invoiced — not a run-rate guess.
     month: summary,
+    budget,
+    debts,
     upcomingPayments: invoices.slice(0, 5).map((record) => ({
       id: record.id,
       client: clientFromSummary(
@@ -106,6 +112,90 @@ async function fetchCollected(env, weekStart, today) {
   return airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, env.AIRTABLE_INCOME_TABLE, {
     filterByFormula: `AND(${airtable.dateRangeFormula(field.incomeDate, weekStart, today)}${notExcluded})`,
     maxRecords: 100,
+  });
+}
+
+/** Category Budgets plus this month's actuals, if anything can supply them. */
+async function fetchBudget(env, today) {
+  if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_BUDGETS_TABLE) return null;
+
+  const field = {
+    category: env.AIRTABLE_BUDGET_CATEGORY_FIELD || "Category",
+    budget: env.AIRTABLE_BUDGET_AMOUNT_FIELD || "Monthly Budget",
+    group: env.AIRTABLE_BUDGET_GROUP_FIELD || "Group",
+    note: env.AIRTABLE_BUDGET_NOTES_FIELD || "Notes",
+  };
+
+  const [records, actuals] = await Promise.all([
+    airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, env.AIRTABLE_BUDGETS_TABLE, { maxRecords: 100 }),
+    fetchActuals(env, today),
+  ]);
+
+  return {
+    month: today.slice(0, 7),
+    ...budgetRows(records, actuals.byCategory, { field }),
+    // Named so the card can say where the numbers came from, or that nothing
+    // is supplying them yet.
+    actualsSource: actuals.source,
+  };
+}
+
+/**
+ * This month's spend per category.
+ *
+ * There is deliberately no default source. Airtable's expense tables
+ * (z_Expense Tracking, z_Monthly Spend) stopped being written to in 2023 —
+ * summing them would report $0 spent against every category, which reads as
+ * "you are well under budget" rather than "nothing is connected". So actuals
+ * stay null until BUDGET_ACTUALS_SOURCE names something real, and the card
+ * says so.
+ */
+async function fetchActuals(env, today) {
+  const source = env.BUDGET_ACTUALS_SOURCE || "";
+  if (source !== "airtable-expenses") return { byCategory: null, source: null };
+
+  const table = env.AIRTABLE_EXPENSES_TABLE || "z_Expense Tracking";
+  const dateField = env.AIRTABLE_EXPENSE_DATE_FIELD || "Date";
+  const typeField = env.AIRTABLE_EXPENSE_TYPE_FIELD || "Type";
+  const costField = env.AIRTABLE_EXPENSE_COST_FIELD || "Cost";
+
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const monthEnd = addDays(`${nextMonth(today)}-01`, -1);
+
+  const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, table, {
+    filterByFormula: airtable.dateRangeFormula(dateField, monthStart, monthEnd),
+    maxRecords: 1000,
+  });
+
+  return {
+    byCategory: sumByCategory(
+      records.map((record) => ({
+        type: airtable.toText(record.fields?.[typeField]),
+        amount: airtable.toAmount(record.fields?.[costField]),
+      })),
+    ),
+    source: table,
+  };
+}
+
+function nextMonth(isoDate) {
+  const [year, month] = isoDate.slice(0, 7).split("-").map(Number);
+  return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
+}
+
+async function fetchDebts(env) {
+  if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_DEBTS_TABLE) return [];
+  const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, env.AIRTABLE_DEBTS_TABLE, {
+    maxRecords: 50,
+  });
+  return debtRows(records, {
+    field: {
+      name: env.AIRTABLE_DEBT_NAME_FIELD || "Debt Name",
+      start: env.AIRTABLE_DEBT_START_FIELD || "Starting Balance",
+      current: env.AIRTABLE_DEBT_CURRENT_FIELD || "Current Balance",
+      asOf: env.AIRTABLE_DEBT_ASOF_FIELD || "As Of Date",
+      payment: env.AIRTABLE_DEBT_PAYMENT_FIELD || "Monthly Payment",
+    },
   });
 }
 

@@ -27,6 +27,7 @@ import {
   handleBillPaidThrough,
   handleCreateInvoice,
   handleCreateBill,
+  handleSetBudget,
 } from "./routes/moneyEdits.js";
 
 const CACHED = {
@@ -113,6 +114,11 @@ async function route(request, env, ctx, url) {
 
   if (url.pathname === "/api/money/bills" && request.method === "POST") {
     return handleCreateBill(request, env);
+  }
+
+  const budget = url.pathname.match(/^\/api\/money\/budgets\/([^/]+)$/);
+  if (budget && request.method === "POST") {
+    return handleSetBudget(request, env, decodeURIComponent(budget[1]));
   }
 
   const invoice = url.pathname.match(/^\/api\/money\/invoices\/([^/]+)\/(status|due)$/);

@@ -226,3 +226,38 @@ export async function handleCreateBill(request, env) {
   const created = await airtable.createRecord(env, env.AIRTABLE_BILLS_BASE_ID, env.AIRTABLE_BILLS_TABLE, fields);
   return json({ ok: true, id: created.id, name, amount, frequency: resolved });
 }
+
+/**
+ * POST /api/money/budgets/:id — retune a category's monthly budget.
+ *
+ * The starting numbers are Jan–Jul averages, so these are meant to be edited.
+ * Still a money write, so it goes behind the same confirm as the rest and
+ * returns the previous amount for undo.
+ */
+export async function handleSetBudget(request, env, recordId) {
+  if (!validRecordId(recordId)) return badRequest("Bad budget id");
+  const body = await request.json().catch(() => ({}));
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount < 0) return badRequest("Enter an amount of zero or more");
+  if (amount > 1000000) return badRequest("That looks like a typo — budgets cap at $1,000,000");
+
+  if (!env.AIRTABLE_MONEY_BASE_ID || !env.AIRTABLE_BUDGETS_TABLE) {
+    throw new ConfigError("the category budgets table is not set");
+  }
+
+  const baseId = env.AIRTABLE_MONEY_BASE_ID;
+  const table = env.AIRTABLE_BUDGETS_TABLE;
+  const amountField = env.AIRTABLE_BUDGET_AMOUNT_FIELD || "Monthly Budget";
+
+  const before = await airtable.getRecord(env, baseId, table, recordId);
+  const previousAmount = Number(before?.fields?.[amountField]) || 0;
+
+  await airtable.updateRecord(env, baseId, table, recordId, { [amountField]: amount });
+  return json({
+    ok: true,
+    amount,
+    previousAmount,
+    category: airtable.toText(before?.fields?.[env.AIRTABLE_BUDGET_CATEGORY_FIELD || "Category"]),
+  });
+}

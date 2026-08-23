@@ -202,6 +202,13 @@ function money(n) {
   return "$" + Math.round(n).toLocaleString("en-US");
 }
 
+/** A variance, signed the way it reads: +$1,151 over, −$145 under. */
+function signedMoney(n) {
+  const rounded = Math.round(n);
+  if (rounded === 0) return "even";
+  return (rounded > 0 ? "+" : "−") + money(Math.abs(rounded));
+}
+
 /** A big-number tile. `pct` null means no bar — the figure stands alone. */
 function figure({ label, value, of, pct, note, badge, badgeClass, tone }) {
   const card = document.createElement("div");
@@ -318,7 +325,213 @@ function renderMoney() {
   grid.appendChild(billsCard);
 
   root.appendChild(grid);
+
+  if (d.budget) root.appendChild(budgetCard(d.budget));
+  if ((d.debts || []).length) root.appendChild(debtCard(d.debts));
+
   appendWarnings(root, d.warnings);
+}
+
+// ---------- Budget ----------
+
+/**
+ * One row per category against its monthly budget. The budget amount is
+ * editable in place — these started as Jan–Jul averages and are meant to be
+ * tuned.
+ */
+function budgetCard(budget) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.marginTop = "20px";
+
+  const totals = budget.totals || {};
+  const connected = budget.actualsSource && totals.actual !== null;
+
+  const sub = connected
+    ? `${money(totals.actual)} of ${money(totals.budget)} budgeted`
+    : `${money(totals.budget)} budgeted a month`;
+
+  let body = `<div class="card-head">
+      <h2>Budget${budget.month ? ` — ${escapeHtml(monthLabel(budget.month))}` : ""}</h2>
+      <div class="card-head-right"><span class="card-sub">${escapeHtml(sub)}</span></div>
+    </div>`;
+
+  // Say it once, at the top, rather than drawing 25 rows of $0 that read as
+  // "well under budget".
+  if (!connected) {
+    body += `<div class="notice">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a5a1a" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+      <div class="notice-text">No spend data is connected yet, so these are targets only — not a picture of what you have actually spent. Budgets are editable: tap an amount to change it.</div>
+    </div>`;
+  }
+
+  body += `<div class="budget-head-row"><span>Category</span><span>Budget</span><span>${connected ? "Actual" : ""}</span></div>`;
+
+  for (const group of budget.groups || []) {
+    body += `<div class="budget-group-label">
+      <span>${escapeHtml(group.name)}</span>
+      <span class="group-total">${connected ? `${money(group.actual)} / ${money(group.budget)}` : money(group.budget)}</span>
+    </div>`;
+
+    for (const row of group.rows) {
+      const over = row.variance !== null && row.variance > 0;
+      const bar =
+        row.percent === null
+          ? ""
+          : `<div class="budget-bar"><span class="${over ? "over" : "under"}" style="width:${Math.min(100, row.percent)}%"></span></div>`;
+
+      const actualCell =
+        row.actual === null
+          ? '<div class="budget-cell muted">—</div>'
+          : `<div class="budget-cell ${over ? "over" : "under"}">${money(row.actual)}<div class="card-sub" style="font-size:11px;">${escapeHtml(signedMoney(row.variance))}</div></div>`;
+
+      body += `<div class="budget-row" data-budget-row="${escapeHtml(row.id || row.category)}">
+        <div style="min-width:0;">
+          <div class="budget-name" title="${escapeHtml(row.category)}">${escapeHtml(row.category)}</div>
+          ${bar}
+        </div>
+        <div class="budget-cell">${
+          row.id
+            ? `<button class="budget-edit" data-budget-for="${escapeHtml(row.id)}" data-budget-value="${row.budget}">${money(row.budget)}</button>`
+            : `<span class="budget-cell muted">no budget</span>`
+        }</div>
+        ${actualCell}
+      </div>`;
+    }
+  }
+
+  card.innerHTML = body;
+  return card;
+}
+
+
+/** Swap the budget amount for an input, and save on enter or blur. */
+async function editBudget(button) {
+  const id = button.dataset.budgetFor;
+  const previous = Number(button.dataset.budgetValue) || 0;
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "budget-input";
+  input.min = "0";
+  input.step = "1";
+  input.value = String(previous);
+  button.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const restore = (amount) => {
+    if (settled) return;
+    settled = true;
+    button.textContent = money(amount);
+    button.dataset.budgetValue = String(amount);
+    input.replaceWith(button);
+  };
+
+  const save = async () => {
+    if (settled) return;
+    const amount = Number(input.value);
+    if (!Number.isFinite(amount) || amount === previous) return restore(previous);
+
+    settled = true;
+    input.disabled = true;
+    const ok = await confirmAction(
+      `Change this budget from ${money(previous)} to ${money(amount)} a month?`,
+      "Change it",
+    );
+    if (!ok) {
+      settled = false;
+      return restore(previous);
+    }
+
+    try {
+      await api(`/api/money/budgets/${encodeURIComponent(id)}`, {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+      settled = false;
+      restore(amount);
+      showToast("Budget updated in Airtable.", {
+        actionLabel: "Undo",
+        onAction: () => revertBudget(id, previous),
+      });
+      loadSection("money");
+    } catch (err) {
+      settled = false;
+      restore(previous);
+      showToast(`Couldn't change that: ${err.message}`, { error: true });
+    }
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      save();
+    }
+    if (event.key === "Escape") restore(previous);
+  });
+  input.addEventListener("blur", save);
+}
+
+async function revertBudget(id, amount) {
+  try {
+    await api(`/api/money/budgets/${encodeURIComponent(id)}`, {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    });
+    showToast(`Back to ${money(amount)}.`, { ms: 4000 });
+    loadSection("money");
+  } catch (err) {
+    showToast(`Couldn't undo that: ${err.message}`, { error: true });
+  }
+}
+
+// ---------- Debt payoff ----------
+
+function debtCard(debts) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.marginTop = "20px";
+
+  const tracked = debts.filter((d) => !d.needsSetup);
+  const owed = tracked.reduce((sum, d) => sum + d.current, 0);
+
+  let body = `<div class="card-head">
+      <h2>Debt payoff</h2>
+      <div class="card-head-right"><span class="card-sub">${
+        tracked.length ? `${money(owed)} still owed` : "Not tracked yet"
+      }</span></div>
+    </div>`;
+
+  for (const debt of debts) {
+    if (debt.needsSetup) {
+      // No balance means no honest progress bar — ask for one instead of
+      // drawing a bar against a number nobody has entered.
+      body += `<div class="debt-row">
+        <div class="debt-head">
+          <span class="debt-name">${escapeHtml(debt.name)}</span>
+          <span class="card-sub">${debt.payment ? `${money(debt.payment)}/mo` : "no payment set"}</span>
+        </div>
+        <div class="row-sub" style="margin-top:6px;">Add a starting and current balance in Airtable to track progress.</div>
+      </div>`;
+      continue;
+    }
+
+    body += `<div class="debt-row">
+      <div class="debt-head">
+        <span class="debt-name">${escapeHtml(debt.name)}</span>
+        <span class="debt-balance">${money(debt.current)}</span>
+      </div>
+      <div class="debt-bar"><span style="width:${debt.percent}%"></span></div>
+      <div class="row-sub">${money(debt.paidOff)} paid off of ${money(debt.start)} · ${debt.percent}%${
+        debt.monthsLeft ? ` · ~${debt.monthsLeft} month${debt.monthsLeft === 1 ? "" : "s"} at ${money(debt.payment)}/mo` : ""
+      }${debt.asOf ? ` · as of ${escapeHtml(debt.asOf)}` : ""}</div>
+    </div>`;
+  }
+
+  card.innerHTML = body;
+  return card;
 }
 
 function moneyCard({ title, sub, addKey, rows, empty }) {
@@ -646,7 +859,12 @@ function confirmAction(message, confirmLabel = "Yes, do it") {
     document.addEventListener("keydown", onKey);
 
     document.body.appendChild(overlay);
-    overlay.querySelector(".confirm-ok").focus();
+    // Focus on the next frame, never synchronously. Opened from a keydown —
+    // pressing Enter on a budget amount, say — focusing here would leave the
+    // OK button focused while that same Enter is still in flight, and the
+    // browser's default action would activate it. The dialog would flash and
+    // auto-accept, silently defeating the confirm on a money write.
+    requestAnimationFrame(() => overlay.querySelector(".confirm-ok")?.focus());
   });
 }
 
@@ -1508,6 +1726,9 @@ $("dashboardCol").addEventListener("click", (event) => {
 
   const now = event.target.closest("[data-complete-now]");
   if (now) return completeFromBar(now);
+
+  const budgetButton = event.target.closest(".budget-edit");
+  if (budgetButton) return editBudget(budgetButton);
 
   const dueButton = event.target.closest(".due-control");
   if (!dueButton) return;

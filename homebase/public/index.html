@@ -744,6 +744,109 @@
     .add-form-row { grid-template-columns: 1fr; }
   }
 
+  /* ---- Budget + debt ---- */
+  .budget-group-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #a99e93;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin: 20px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--linen);
+  }
+  .budget-group-label:first-of-type { margin-top: 6px; }
+  .budget-group-label .group-total { color: #7d736a; font-variant-numeric: tabular-nums; }
+
+  .budget-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 92px;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--linen);
+  }
+  .budget-row:last-child { border-bottom: none; }
+  .budget-name { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .budget-bar { background: var(--linen); height: 5px; border-radius: 3px; overflow: hidden; margin-top: 6px; max-width: 320px; }
+  .budget-bar span { display: block; height: 100%; border-radius: 3px; background: var(--burnt-orange); }
+  .budget-bar span.over { background: #b3402a; }
+  .budget-bar span.under { background: #2f6b4a; }
+  .budget-cell { text-align: right; font-family: Georgia, serif; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .budget-cell.muted { color: #a99e93; font-family: 'DM Sans', sans-serif; font-size: 12px; }
+  .budget-cell.over { color: #b3402a; }
+  .budget-cell.under { color: #2f6b4a; }
+  .budget-head-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 92px;
+    gap: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #a99e93;
+    text-align: right;
+  }
+  .budget-head-row span:first-child { text-align: left; }
+
+  /* The editable budget amount, styled like the due-date control elsewhere */
+  .budget-edit {
+    font-family: Georgia, serif;
+    font-size: 15px;
+    color: var(--dark-text);
+    background: none;
+    border: none;
+    border-bottom: 1px dashed #c9bfb4;
+    padding: 0 0 1px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .budget-edit:hover { color: var(--burnt-orange); border-bottom-color: var(--burnt-orange); }
+  .budget-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    width: 84px;
+    padding: 3px 6px;
+    text-align: right;
+    border: 1px solid var(--burnt-orange);
+    border-radius: 4px;
+    outline: none;
+  }
+
+  /* Told-you-plainly banner for a missing integration */
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--yellow-soft);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+  .notice svg { flex: none; margin-top: 1px; }
+  .notice-text { font-size: 13.5px; color: #6d5623; line-height: 1.5; }
+
+  .debt-row { padding: 14px 0; border-bottom: 1px solid var(--linen); }
+  .debt-row:last-child { border-bottom: none; }
+  .debt-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .debt-name { font-size: 15px; }
+  .debt-balance { font-family: Georgia, serif; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .debt-bar { background: var(--linen); height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 6px; }
+  .debt-bar span { display: block; height: 100%; border-radius: 4px; background: #2f6b4a; }
+
+  @media (max-width: 900px) {
+    .budget-row, .budget-head-row { grid-template-columns: minmax(0, 1fr) 78px 78px; gap: 8px; }
+    .budget-name { font-size: 13.5px; }
+    .budget-cell { font-size: 14px; }
+    .budget-input { font-size: 16px; width: 76px; }
+  }
+
   .toast {
     position: fixed;
     left: 50%;

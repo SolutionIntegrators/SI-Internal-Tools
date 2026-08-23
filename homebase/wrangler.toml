@@ -85,6 +85,14 @@ AIRTABLE_PROJECTS_TABLE = "ALL Active Projects"
 # close. The dashboard reads these rather than recomputing them so it can never
 # disagree with the Airtable interface built on the same table.
 AIRTABLE_SUMMARY_TABLE = "Solution Integrators Financial Summary"
+AIRTABLE_BUDGETS_TABLE = "Category Budgets"
+AIRTABLE_DEBTS_TABLE = "Debts"
+# Where this month's actual spend comes from. Deliberately empty: the Airtable
+# expense tables stopped being written to in 2023, and summing them would show
+# $0 against every budget — which reads as "under budget" rather than "not
+# connected". Set to "airtable-expenses" only once something writes to them
+# again. The real 2026 numbers are in QuickBooks.
+BUDGET_ACTUALS_SOURCE = ""
 AIRTABLE_PROJECT_NAME_FIELD = "Company Name"
 AIRTABLE_PROJECT_STATUS_FIELD = "Project Status"
 AIRTABLE_PROJECT_SERVICE_FIELD = "Service"
