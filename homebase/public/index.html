@@ -847,6 +847,112 @@
     .budget-input { font-size: 16px; width: 76px; }
   }
 
+  /* ---- Calendar: day / week / month + flyout ---- */
+  .cal-modes { display: flex; gap: 4px; background: var(--white); padding: 3px; border-radius: 999px; border: 1px solid #e2d7c9; }
+  .cal-mode {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: transparent;
+    color: #7d736a;
+    border: none;
+  }
+  .cal-mode.active { background: var(--denim-blue); color: var(--white); }
+
+  /* Week view: same 7 columns, but tall enough to stop hiding things. */
+  .cal-week-view .cal-day { min-height: 340px; }
+  .cal-week-view .cal-item { font-size: 11.5px; }
+
+  /* Day view: one column, everything in full. */
+  .cal-day-view { background: var(--white); border-radius: 6px; padding: 22px; box-shadow: 0 2px 10px rgba(30,30,30,0.05); }
+  .day-entry { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--linen); }
+  .day-entry:last-child { border-bottom: none; }
+  .day-entry-mark { width: 4px; border-radius: 2px; flex: none; }
+  .day-entry-body { flex: 1; min-width: 0; }
+  .day-entry-title { font-size: 15px; line-height: 1.35; }
+  .day-entry-meta { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #7d736a; margin-top: 3px; }
+  .day-kind {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    flex: none;
+    align-self: flex-start;
+  }
+
+  /* Flyout — the answer to "I cannot read the day from a grid cell". */
+  .flyout-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(31, 30, 28, 0.35);
+    z-index: 55;
+  }
+  .flyout {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 420px;
+    max-width: 100%;
+    background: var(--linen);
+    z-index: 56;
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.16);
+    display: flex;
+    flex-direction: column;
+    animation: flyout-in 0.16s ease-out;
+  }
+  @keyframes flyout-in { from { transform: translateX(16px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .flyout { animation: none; } }
+  .flyout-head {
+    background: var(--denim-blue);
+    color: var(--white);
+    padding: 20px 22px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex: none;
+  }
+  .flyout-date { font-family: Georgia, serif; font-size: 22px; }
+  .flyout-sub { font-family: 'DM Sans', sans-serif; font-size: 12px; opacity: 0.8; margin-top: 4px; }
+  .flyout-close {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--white);
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    padding: 0;
+  }
+  .flyout-close:hover { background: rgba(255, 255, 255, 0.28); }
+  .flyout-body { flex: 1; overflow-y: auto; padding: 18px 22px 24px; }
+  .flyout-body .card { margin-bottom: 16px; }
+  .flyout-body .add-form { margin-top: 0; }
+
+  @media (max-width: 640px) {
+    /* A bottom sheet reads better than a side panel on a phone. */
+    .flyout {
+      top: auto;
+      left: 0;
+      right: 0;
+      height: 82vh;
+      height: 82dvh;
+      width: auto;
+      border-radius: 12px 12px 0 0;
+      animation: sheet-in 0.18s ease-out;
+    }
+    @keyframes sheet-in { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+    .cal-week-view .cal-day { min-height: 210px; }
+  }
+
   .toast {
     position: fixed;
     left: 50%;

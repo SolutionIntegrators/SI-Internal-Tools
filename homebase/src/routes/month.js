@@ -9,7 +9,7 @@
 // calendar events, not the whole grid.
 import { json, softly } from "../lib/http.js";
 import { localDate, addDays } from "../lib/dates.js";
-import { monthGrid, byDay, isValidMonth } from "../lib/month.js";
+import { byDay, requestedWindow } from "../lib/month.js";
 import * as clickup from "../services/clickup.js";
 import * as google from "../services/google.js";
 import * as airtable from "../services/airtable.js";
@@ -37,9 +37,15 @@ function milestoneFields(env) {
 export async function handleMonth(env, ctx, url) {
   const tz = env.TIMEZONE;
   const today = localDate(new Date(), tz);
-  const requested = url?.searchParams?.get("month");
-  const month = isValidMonth(requested) ? requested : today.slice(0, 7);
-  const grid = monthGrid(month);
+  const params = url?.searchParams;
+  // A month parameter gives the familiar grid; an explicit start/end serves the
+  // day and week views, which need spans a month cannot express.
+  const grid = requestedWindow({
+    month: params?.get("month"),
+    start: params?.get("start"),
+    end: params?.get("end"),
+    today,
+  });
   const warnings = [];
 
   const [content, milestones, events, payments, bills] = await Promise.all([

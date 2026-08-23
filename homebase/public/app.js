@@ -1318,6 +1318,12 @@ let monthData = null;
 let monthKey = null;      // "2026-08"
 let monthLoading = false;
 let openCreateDate = null;
+// Which of day / week / month the calendar is showing, and the date it is
+// anchored on. The anchor is a real day rather than a month so stepping keeps
+// its place when switching between units.
+let calMode = localStorage.getItem("homebase-cal-mode") || "month";
+let calAnchor = null;
+let flyoutDate = null;
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const KIND_LABELS = {
@@ -1328,13 +1334,6 @@ const KIND_LABELS = {
   bill: "Bills",
 };
 
-/** "2026-08" shifted by whole months, without tripping over December. */
-function shiftMonthKey(key, months) {
-  const [year, month] = key.split("-").map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1 + months, 1));
-  return shifted.toISOString().slice(0, 7);
-}
-
 function monthLabel(key) {
   const [year, month] = key.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-US", {
@@ -1344,19 +1343,82 @@ function monthLabel(key) {
   });
 }
 
-async function loadMonth(key) {
-  monthKey = key;
+const DAY_MS = 86400000;
+const isoDay = (date) => date.toISOString().slice(0, 10);
+const shiftDay = (iso, days) => isoDay(new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY_MS));
+const weekdayOf = (iso) => new Date(`${iso}T00:00:00Z`).getUTCDay();
+const sundayOf = (iso) => shiftDay(iso, -weekdayOf(iso));
+
+/** The span the current mode needs, and how to ask the API for it. */
+function calWindow() {
+  const anchor = calAnchor || isoDay(new Date());
+  if (calMode === "day") return { start: anchor, end: anchor };
+  if (calMode === "week") {
+    const start = sundayOf(anchor);
+    return { start, end: shiftDay(start, 6) };
+  }
+  // Month: whole Sunday-to-Saturday weeks covering the month, same grid the
+  // server used to compute. Asking by range keeps one code path.
+  const first = `${anchor.slice(0, 7)}-01`;
+  const [year, month] = anchor.slice(0, 7).split("-").map(Number);
+  const last = isoDay(new Date(Date.UTC(year, month, 0)));
+  const start = sundayOf(first);
+  return { start, end: shiftDay(last, 6 - weekdayOf(last)) };
+}
+
+async function loadMonth(anchor) {
+  if (anchor && /^\d{4}-\d{2}$/.test(anchor)) anchor = `${anchor}-01`;
+  calAnchor = anchor || calAnchor || isoDay(new Date());
+  monthKey = calAnchor.slice(0, 7);
   monthLoading = true;
   renderCalendar();
+
+  const { start, end } = calWindow();
   try {
-    monthData = await api(`/api/dashboard/month?month=${encodeURIComponent(key)}`);
-    monthKey = monthData.month || key;
+    monthData = await api(`/api/dashboard/month?start=${start}&end=${end}`);
   } catch (err) {
     monthData = { error: err.message };
   } finally {
     monthLoading = false;
     renderCalendar();
+    if (flyoutDate) renderFlyout();
   }
+}
+
+/** Step by whatever unit is on screen. */
+function stepCalendar(direction) {
+  const anchor = calAnchor || isoDay(new Date());
+  if (calMode === "day") return loadMonth(shiftDay(anchor, direction));
+  if (calMode === "week") return loadMonth(shiftDay(anchor, direction * 7));
+  const [year, month] = anchor.slice(0, 7).split("-").map(Number);
+  return loadMonth(isoDay(new Date(Date.UTC(year, month - 1 + direction, 1))));
+}
+
+function setCalMode(mode) {
+  if (!["day", "week", "month"].includes(mode) || mode === calMode) return;
+  calMode = mode;
+  localStorage.setItem("homebase-cal-mode", mode);
+  monthData = null;
+  loadMonth(calAnchor);
+}
+
+/** The heading the current mode deserves. */
+function calTitle() {
+  const anchor = calAnchor || isoDay(new Date());
+  if (calMode === "day") {
+    return new Date(`${anchor}T12:00:00Z`).toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+    });
+  }
+  if (calMode === "week") {
+    const { start, end } = calWindow();
+    const fmt = (iso, opts) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" });
+    const sameMonth = start.slice(0, 7) === end.slice(0, 7);
+    return sameMonth
+      ? `${fmt(start, { month: "long", day: "numeric" })}–${fmt(end, { day: "numeric" })}, ${start.slice(0, 4)}`
+      : `${fmt(start, { month: "short", day: "numeric" })} – ${fmt(end, { month: "short", day: "numeric" })}, ${end.slice(0, 4)}`;
+  }
+  return monthLabel(anchor.slice(0, 7));
 }
 
 function renderCalendar() {
@@ -1366,11 +1428,18 @@ function renderCalendar() {
 
   const head = document.createElement("div");
   head.className = "cal-head";
-  head.innerHTML = `<div class="cal-title">${escapeHtml(monthKey ? monthLabel(monthKey) : "Calendar")}</div>
-    <div class="cal-nav">
-      <button data-month-step="-1">&larr;</button>
-      <button data-month-today="1">Today</button>
-      <button data-month-step="1">&rarr;</button>
+  head.innerHTML = `<div class="cal-title">${escapeHtml(calTitle())}</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="cal-modes">
+        ${["day", "week", "month"]
+          .map((mode) => `<button class="cal-mode${mode === calMode ? " active" : ""}" data-cal-mode="${mode}">${mode[0].toUpperCase() + mode.slice(1)}</button>`)
+          .join("")}
+      </div>
+      <div class="cal-nav">
+        <button data-month-step="-1" title="Previous">&larr;</button>
+        <button data-month-today="1">Today</button>
+        <button data-month-step="1" title="Next">&rarr;</button>
+      </div>
     </div>`;
   root.appendChild(head);
 
@@ -1387,15 +1456,7 @@ function renderCalendar() {
   const layout = document.createElement("div");
   layout.className = "calendar-layout";
 
-  // --- grid ---
-  const grid = document.createElement("div");
-  grid.className = "cal-grid";
-  const weekdays = WEEKDAY_LABELS.map((day) => `<div class="cal-weekday">${day}</div>`).join("");
-  const weeks = (monthData.weeks || [])
-    .map((week) => `<div class="cal-week">${week.map(dayCell).join("")}</div>`)
-    .join("");
-  grid.innerHTML = `<div class="cal-weekdays">${weekdays}</div>${weeks}`;
-  layout.appendChild(grid);
+  layout.appendChild(calMode === "day" ? dayView() : gridView());
 
   const legend = document.createElement("div");
   legend.className = "cal-legend";
@@ -1405,7 +1466,7 @@ function renderCalendar() {
         `<span><i class="cal-swatch cal-item-${kind}" style="border-left-width:9px;border-left-style:solid"></i>${escapeHtml(label)}</span>`,
     )
     .join("");
-  grid.appendChild(legend);
+  layout.firstChild.appendChild(legend);
 
   // --- rail ---
   const rail = document.createElement("div");
@@ -1438,11 +1499,157 @@ function renderCalendar() {
   if (openCreateDate) mountCreateForm(openCreateDate);
 }
 
-function dayCell(date) {
+/** Chunk the loaded window into weeks the grid can lay out. */
+function windowWeeks() {
+  const { start, end } = calWindow();
+  const weeks = [];
+  for (let cursor = start; cursor <= end; cursor = shiftDay(cursor, 7)) {
+    weeks.push(Array.from({ length: 7 }, (_, offset) => shiftDay(cursor, offset)));
+  }
+  return weeks;
+}
+
+function gridView() {
+  const grid = document.createElement("div");
+  grid.className = "cal-grid" + (calMode === "week" ? " cal-week-view" : "");
+  const weekdays = WEEKDAY_LABELS.map((day) => `<div class="cal-weekday">${day}</div>`).join("");
+  // A week gets one tall row and shows everything; a month stays capped so the
+  // rows do not grow unevenly — the flyout is where the full day lives.
+  const limit = calMode === "week" ? 20 : 3;
+  const weeks = windowWeeks()
+    .map((week) => `<div class="cal-week">${week.map((date) => dayCell(date, limit)).join("")}</div>`)
+    .join("");
+  grid.innerHTML = `<div class="cal-weekdays">${weekdays}</div>${weeks}`;
+  return grid;
+}
+
+/** One day, everything on it, nothing truncated. */
+function dayView() {
+  const date = calAnchor || isoDay(new Date());
+  const wrap = document.createElement("div");
+  wrap.className = "cal-day-view";
+  wrap.innerHTML = `<div class="card-head">
+      <h2>${escapeHtml(relativeDayLabel(date))}</h2>
+      <div class="card-head-right">
+        <span class="card-sub">${dayItems(date).length} item${dayItems(date).length === 1 ? "" : "s"}</span>
+        ${monthData.canCreate ? `<button class="add-btn" data-day-add="${escapeHtml(date)}" title="Add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>` : ""}
+      </div>
+    </div>${dayEntries(date)}`;
+  return wrap;
+}
+
+function dayItems(date) {
+  return (monthData.days || {})[date] || [];
+}
+
+function relativeDayLabel(date) {
+  const today = monthData?.today;
+  const long = new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric", timeZone: "UTC",
+  });
+  if (date === today) return `Today · ${long}`;
+  if (today && date === shiftDay(today, 1)) return `Tomorrow · ${long}`;
+  if (today && date === shiftDay(today, -1)) return `Yesterday · ${long}`;
+  return long;
+}
+
+/** The full list for one day — the thing a grid cell cannot show. */
+function dayEntries(date) {
+  const items = dayItems(date);
+  if (!items.length) return '<div class="empty-row">Nothing on this day.</div>';
+
+  return items
+    .map((item) => {
+      const kind = KIND_LABELS[item.kind] || item.kind || "";
+      return `<div class="day-entry">
+        <div class="day-entry-mark cal-item-${escapeHtml(item.kind)}" style="background:currentColor;"></div>
+        <div class="day-entry-body">
+          <div class="day-entry-title">${escapeHtml(item.title)}</div>
+          <div class="day-entry-meta">${escapeHtml([kind, item.meta].filter(Boolean).join(" · "))}</div>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+// ---------- Day flyout ----------
+
+function openFlyout(date) {
+  flyoutDate = date;
+  renderFlyout();
+}
+
+function closeFlyout() {
+  flyoutDate = null;
+  openCreateDate = null;
+  document.querySelector(".flyout-scrim")?.remove();
+  document.querySelector(".flyout")?.remove();
+  document.removeEventListener("keydown", flyoutEscape);
+}
+
+function flyoutEscape(event) {
+  if (event.key === "Escape") closeFlyout();
+}
+
+/**
+ * The panel behind a day click. A grid cell can show three clipped chips; this
+ * shows the whole day with its detail, and is where a task gets added.
+ */
+function renderFlyout() {
+  if (!flyoutDate) return;
+  document.querySelector(".flyout-scrim")?.remove();
+  document.querySelector(".flyout")?.remove();
+
+  const date = flyoutDate;
+  const items = dayItems(date);
+
+  const scrim = document.createElement("div");
+  scrim.className = "flyout-scrim";
+  scrim.addEventListener("click", closeFlyout);
+
+  const panel = document.createElement("div");
+  panel.className = "flyout";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", `Detail for ${date}`);
+  panel.innerHTML = `<div class="flyout-head">
+      <div>
+        <div class="flyout-date">${escapeHtml(relativeDayLabel(date))}</div>
+        <div class="flyout-sub">${items.length} item${items.length === 1 ? "" : "s"} · ${escapeHtml(date)}</div>
+      </div>
+      <button class="flyout-close" data-close-flyout="1" title="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="flyout-body">
+      <div class="card">
+        <div class="card-head">
+          <h2>On this day</h2>
+          ${monthData.canCreate ? `<button class="add-btn" data-day-add="${escapeHtml(date)}" title="Add a task">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>` : ""}
+        </div>
+        ${dayEntries(date)}
+      </div>
+    </div>`;
+
+  document.body.appendChild(scrim);
+  document.body.appendChild(panel);
+  document.addEventListener("keydown", flyoutEscape);
+  panel.querySelector(".flyout-close")?.focus();
+
+  if (openCreateDate === date) mountCreateForm(date);
+}
+
+function dayCell(date, limit = 3) {
   const items = (monthData.days || {})[date] || [];
-  const outside = date < monthData.first || date > monthData.last;
+  // In month mode the grid spills into the neighbouring months; those days are
+  // dimmed. A week view has no outside.
+  const month = (calAnchor || "").slice(0, 7);
+  const outside = calMode === "month" && date.slice(0, 7) !== month;
   const today = date === monthData.today;
-  const shown = items.slice(0, 3);
+  const shown = items.slice(0, limit);
   const rest = items.length - shown.length;
 
   const chips = shown
@@ -1460,8 +1667,13 @@ function dayCell(date) {
 
 /** The create form drops into the rail so it never resizes the grid mid-click. */
 function mountCreateForm(date) {
-  const rail = document.querySelector(".cal-rail");
-  if (!rail || !monthData?.canCreate) return;
+  // The form follows the day: into the flyout when one is open, otherwise the
+  // day view, otherwise the unscheduled rail.
+  const host =
+    document.querySelector(".flyout-body .card") ||
+    document.querySelector(".cal-day-view") ||
+    document.querySelector(".cal-rail");
+  if (!host || !monthData?.canCreate) return;
   document.querySelector(".cal-create")?.remove();
 
   const types = monthData.contentTypes || [];
@@ -1474,7 +1686,7 @@ function mountCreateForm(date) {
       <button type="submit" class="primary">Add to Content Management</button>
       <button type="button" data-cancel-create="1">Cancel</button>
     </div>`;
-  rail.prepend(form);
+  host.appendChild(form);
   form.querySelector("#createTitle").focus();
 
   form.addEventListener("submit", async (event) => {
@@ -1492,7 +1704,7 @@ function mountCreateForm(date) {
       });
       openCreateDate = null;
       showToast(`Added "${result.task.title}" on ${date}.`, { ms: 5000 });
-      await loadMonth(monthKey);
+      await loadMonth(calAnchor);
       // The pipeline card reads the same list, so keep it honest.
       loadSection("tasks");
     } catch (err) {
@@ -1539,7 +1751,7 @@ function scheduleRailItem(button) {
         body: JSON.stringify({ due: value }),
       });
       showToast(`Scheduled for ${value}.`, { ms: 4000 });
-      await loadMonth(monthKey);
+      await loadMonth(calAnchor);
       loadSection("tasks");
     } catch (err) {
       settled = false;
@@ -1562,13 +1774,14 @@ function showView(view) {
   // The calendar and the client timeline both want the chat column's width.
   document.body.classList.toggle("wide-mode", view === "calendar" || view === "clients");
 
+  if (view !== "calendar") closeFlyout();
   for (const [name, id] of Object.entries(VIEW_IDS)) $(id).hidden = name !== view;
   for (const button of document.querySelectorAll(".view-btn")) {
     button.className = "view-btn" + (button.dataset.view === view ? " active" : "");
   }
 
   if (view === "calendar" && !monthData && !monthLoading) {
-    loadMonth(monthKey || new Date().toISOString().slice(0, 7));
+    loadMonth(calAnchor || isoDay(new Date()));
     return;
   }
   render();
@@ -1663,21 +1876,25 @@ $("calendarView").addEventListener("click", (event) => {
   const retry = event.target.dataset?.retry;
   if (retry === "month") {
     monthData = null;
-    loadMonth(monthKey);
+    loadMonth(calAnchor);
     return;
   }
+
+  const mode = event.target.closest("[data-cal-mode]");
+  if (mode) return setCalMode(mode.dataset.calMode);
 
   const step = event.target.dataset?.monthStep;
   if (step) {
     openCreateDate = null;
-    monthData = null;
-    loadMonth(shiftMonthKey(monthKey, Number(step)));
+    closeFlyout();
+    stepCalendar(Number(step));
     return;
   }
   if (event.target.dataset?.monthToday) {
     openCreateDate = null;
+    closeFlyout();
     monthData = null;
-    loadMonth(new Date().toISOString().slice(0, 7));
+    loadMonth(isoDay(new Date()));
     return;
   }
 
@@ -1687,18 +1904,39 @@ $("calendarView").addEventListener("click", (event) => {
     return;
   }
 
+  const dayAdd = event.target.closest("[data-day-add]");
+  if (dayAdd) {
+    openCreateDate = dayAdd.dataset.dayAdd;
+    mountCreateForm(openCreateDate);
+    return;
+  }
+
   const schedule = event.target.closest(".rail-schedule");
   if (schedule) {
     scheduleRailItem(schedule);
     return;
   }
 
-  // A day opens the create form for that date. Done last so the controls above
-  // aren't swallowed by the cell they sit in.
+  // A day opens the flyout. Done last so the controls above aren't swallowed
+  // by the cell they sit in.
   const day = event.target.closest(".cal-day");
-  if (day) {
-    openCreateDate = day.dataset.day;
+  if (day) openFlyout(day.dataset.day);
+});
+
+// The flyout is appended to the body, so it needs its own delegate.
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".flyout")) return;
+  if (event.target.closest("[data-close-flyout]")) return closeFlyout();
+
+  const dayAdd = event.target.closest("[data-day-add]");
+  if (dayAdd) {
+    openCreateDate = dayAdd.dataset.dayAdd;
     mountCreateForm(openCreateDate);
+    return;
+  }
+  if (event.target.closest("[data-cancel-add]") || event.target.dataset?.cancelCreate) {
+    openCreateDate = null;
+    document.querySelector(".cal-create")?.remove();
   }
 });
 

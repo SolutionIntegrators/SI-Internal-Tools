@@ -2,7 +2,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { monthGrid, endOfMonth, weekdayIndex, shiftMonth, isValidMonth, byDay } from "../src/lib/month.js";
+import {
+  monthGrid, endOfMonth, weekdayIndex, shiftMonth, isValidMonth, byDay,
+  isValidDate, daysBetween, requestedWindow, MAX_RANGE_DAYS,
+} from "../src/lib/month.js";
 import { handleMonth } from "../src/routes/month.js";
 import { handleCreateTask } from "../src/routes/taskCreate.js";
 
@@ -105,4 +108,56 @@ test("creating is refused outright when no content list is configured", async ()
     () => handleCreateTask(post({ title: "Reel" }), { ...env, CLICKUP_CONTENT_LIST_ID: "" }),
     /no list to create in/,
   );
+});
+
+test("an explicit range wins over the month, and is capped", () => {
+  const today = "2026-08-17";
+
+  // A single day — what the day view asks for.
+  const day = requestedWindow({ start: "2026-09-03", end: "2026-09-03", today });
+  assert.equal(day.mode, "range");
+  assert.equal(day.gridStart, "2026-09-03");
+  assert.equal(day.gridEnd, "2026-09-03");
+
+  // A week that straddles two months — the case a month parameter cannot express.
+  const week = requestedWindow({ start: "2026-08-30", end: "2026-09-05", today });
+  assert.equal(week.mode, "range");
+  assert.equal(daysBetween(week.gridStart, week.gridEnd), 7);
+
+  // Junk, a backwards range, and an oversized one all fall back to the month
+  // rather than pulling five sources over an unbounded span.
+  for (const [start, end] of [
+    ["not-a-date", "2026-09-05"],
+    ["2026-09-05", "2026-08-30"],
+    ["2026-02-30", "2026-03-02"],
+    ["2026-01-01", "2026-12-31"],
+  ]) {
+    const fallback = requestedWindow({ start, end, today });
+    assert.equal(fallback.mode, "month", `${start}..${end} should not be honoured`);
+    assert.equal(fallback.month, "2026-08");
+  }
+
+  // Exactly at the cap is still allowed.
+  const atCap = requestedWindow({ start: "2026-08-01", end: "2026-10-01", today });
+  assert.equal(daysBetween("2026-08-01", "2026-10-01"), MAX_RANGE_DAYS);
+  assert.equal(atCap.mode, "range");
+});
+
+test("date validation rejects impossible days, not just bad shapes", () => {
+  assert.ok(isValidDate("2026-08-17"));
+  assert.ok(isValidDate("2024-02-29"), "a real leap day");
+  assert.ok(!isValidDate("2026-02-30"), "February has no 30th");
+  assert.ok(!isValidDate("2026-13-01"));
+  assert.ok(!isValidDate("2026-8-1"));
+  assert.ok(!isValidDate(""));
+  assert.ok(!isValidDate(null));
+});
+
+test("the endpoint honours a range and drops the month grid for it", async () => {
+  const body = await (await handleMonth(env, ctx, new URL("https://x/api/dashboard/month?start=2026-08-30&end=2026-09-05"))).json();
+  assert.equal(body.gridStart, "2026-08-30");
+  assert.equal(body.gridEnd, "2026-09-05");
+  assert.equal(body.mode, "range");
+  assert.equal(body.weeks, undefined, "a range has no month grid to lay out");
+  assert.deepEqual(body.days, {});
 });

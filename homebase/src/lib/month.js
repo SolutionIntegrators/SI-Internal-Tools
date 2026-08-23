@@ -67,3 +67,33 @@ export function byDay(items) {
   }
   return days;
 }
+
+/** A plain YYYY-MM-DD that is also a real date. */
+export function isValidDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+/** Whole days between two ISO dates, inclusive of both ends. */
+export function daysBetween(start, end) {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
+}
+
+/**
+ * The window a calendar request is asking about.
+ *
+ * A day and a week view need spans a month parameter cannot express, so an
+ * explicit start/end takes precedence. The span is capped: these five sources
+ * are queried per request, and an unbounded range would let one URL pull a
+ * year of every one of them.
+ */
+export const MAX_RANGE_DAYS = 62;
+
+export function requestedWindow({ month, start, end, today }) {
+  if (isValidDate(start) && isValidDate(end) && end >= start && daysBetween(start, end) <= MAX_RANGE_DAYS) {
+    return { mode: "range", gridStart: start, gridEnd: end };
+  }
+  const grid = monthGrid(isValidMonth(month) ? month : today.slice(0, 7));
+  return { mode: "month", ...grid };
+}
