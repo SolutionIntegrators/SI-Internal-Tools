@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Base — Solution Integrators</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Questrial&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --burnt-orange: #A34F2B;
+    --sunset-yellow: #D28733;
+    --denim-blue: #3A4F5E;
+    --linen: #FCF1E8;
+    --white: #FFFFFF;
+    --dark-text: #1E1E1E;
+    --denim-soft: #e8edf0;
+    --yellow-soft: #f6e6cf;
+    --orange-soft: #f1ddd2;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--linen);
+    color: var(--dark-text);
+    font-family: 'Questrial', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: Georgia, 'Times New Roman', serif; margin: 0; }
+
+  .eyebrow {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+
+  button {
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    border: none;
+  }
+
+  header {
+    background: var(--denim-blue);
+    color: var(--linen);
+    padding: 28px 32px 24px;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header-top .eyebrow { color: var(--sunset-yellow); margin-bottom: 6px; }
+  header h1 { font-size: 34px; color: var(--white); }
+  .refresh-block { text-align: right; }
+  .as-of { font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
+  .refresh-btn {
+    background: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    transition: opacity 0.15s;
+  }
+  .refresh-btn:hover { opacity: 0.85; }
+  .refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .focus-banner {
+    max-width: 1280px;
+    margin: -20px auto 0;
+    padding: 0 32px;
+  }
+  .focus-inner {
+    background: var(--white);
+    border-left: 4px solid var(--burnt-orange);
+    border-radius: 4px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 18px rgba(30,30,30,0.06);
+  }
+  .focus-inner .eyebrow { color: var(--burnt-orange); margin-bottom: 8px; }
+  #focusText {
+    font-family: Georgia, serif;
+    font-size: 20px;
+    line-height: 1.4;
+    color: var(--dark-text);
+    outline: none;
+    min-height: 28px;
+  }
+  #focusText:empty:before {
+    content: attr(data-placeholder);
+    color: #999;
+  }
+  .focus-hint { font-size: 11px; color: #999; margin-top: 8px; font-family: 'DM Sans', sans-serif; }
+
+  .layout {
+    max-width: 1280px;
+    margin: 28px auto 60px;
+    padding: 0 32px;
+  }
+
+  .dashboard-grid { display: block; }
+  /* An explicit `display` on an element beats the user-agent rule for [hidden],
+     so views that set one need this to stay hidden when toggled off. */
+  [hidden] { display: none !important; }
+
+  .vitals-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .vital { flex: 1; min-width: 150px; background: var(--white); border-radius: 6px; padding: 16px 18px; box-shadow: 0 2px 10px rgba(30,30,30,0.05); }
+  .vital-num { font-family: Georgia, serif; font-size: 24px; color: var(--denim-blue); }
+  .vital-num.alert { color: var(--burnt-orange); }
+  .vital-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #777; font-family: 'DM Sans', sans-serif; margin-top: 3px; }
+
+  .section-block { margin-bottom: 30px; }
+  .section-label {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--burnt-orange);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--burnt-orange);
+  }
+  .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .section-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 900px) {
+    .section-grid.cols-3 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .section-grid, .section-grid.cols-3 { grid-template-columns: 1fr; }
+    /* Two up rather than stacked: a full-width card per number pushed the
+       actual content most of a screen down. */
+    .vitals-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+    .vital { min-width: 0; padding: 14px; }
+    .vital-num { font-size: 22px; }
+  }
+
+  .revenue-progress-track { background: var(--linen); height: 10px; border-radius: 6px; overflow: hidden; margin: 12px 0 8px; }
+  .revenue-progress-fill { background: var(--burnt-orange); height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+  .revenue-figures { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+  .revenue-current { font-family: Georgia, serif; font-size: 28px; color: var(--burnt-orange); }
+  .revenue-goal-label { font-size: 12px; color: #777; font-family: 'DM Sans', sans-serif; }
+  .revenue-note { font-size: 12px; color: #777; margin-top: 6px; }
+
+  .card {
+    background: var(--white);
+    border-radius: 6px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(30,30,30,0.05);
+  }
+  .card.span-2 { grid-column: 1 / -1; }
+  .card h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--denim-blue);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--linen);
+  }
+  .empty-row { font-size: 13px; color: #999; font-style: italic; }
+
+  .row { padding: 9px 0; border-bottom: 1px solid #f4ede4; }
+  .row:last-child { border-bottom: none; }
+  .row-title { font-weight: 600; font-size: 14px; color: var(--dark-text); }
+  .row-sub { font-size: 12px; color: #777; margin-top: 2px; }
+
+  .pill {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-left: 8px;
+  }
+  .pill-on_track { background: var(--yellow-soft); color: #8a5c1c; }
+  .pill-needs_attention { background: var(--burnt-orange); color: var(--white); }
+  .pill-stalled { background: var(--denim-soft); color: var(--denim-blue); }
+
+  .loading-msg, .error-msg { font-size: 13px; padding: 20px 4px; color: #777; }
+  .error-msg { color: var(--burnt-orange); }
+  .error-msg button { text-decoration: underline; background: none; color: var(--burnt-orange); font-size: 13px; padding: 0; margin-left: 6px; }
+  .warning-note { font-size: 11px; color: #999; margin-top: 8px; font-family: 'DM Sans', sans-serif; }
+
+  /* Chat panel */
+  .chat-panel {
+    background: var(--white);
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(30,30,30,0.05);
+    display: flex;
+    flex-direction: column;
+    max-width: 760px;
+    margin: 0 auto;
+    height: calc(100vh - 260px);
+    min-height: 420px;
+  }
+  .chat-header {
+    background: var(--denim-blue);
+    color: var(--white);
+    padding: 16px 20px;
+    border-radius: 6px 6px 0 0;
+  }
+  .chat-header h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  .chat-header p { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-empty { font-size: 13px; color: #999; padding: 8px 4px; line-height: 1.6; }
+  .msg { max-width: 88%; padding: 9px 13px; border-radius: 10px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }
+  .msg-user { align-self: flex-end; background: var(--burnt-orange); color: var(--white); border-bottom-right-radius: 3px; }
+  .msg-assistant { align-self: flex-start; background: var(--linen); color: var(--dark-text); border-bottom-left-radius: 3px; }
+  .msg-thinking { align-self: flex-start; font-size: 12px; color: #999; font-style: italic; padding: 4px 13px; }
+
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--linen);
+  }
+  #chatInput {
+    flex: 1;
+    font-family: 'Questrial', sans-serif;
+    font-size: 13.5px;
+    padding: 9px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    resize: none;
+    outline: none;
+  }
+  #chatInput:focus { border-color: var(--burnt-orange); }
+  .send-btn {
+    background: var(--denim-blue);
+    color: var(--white);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 0 16px;
+    border-radius: 6px;
+  }
+  .send-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .tab-btn {
+    background: var(--white);
+    color: var(--denim-blue);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 20px;
+  }
+  .tab-btn.active { background: var(--denim-blue); color: var(--white); }
+
+  /* Editable task and money rows */
+  .row.editable { display: flex; align-items: flex-start; gap: 10px; }
+  .row-main { flex: 1; min-width: 0; }
+  .task-check,
+  .money-check {
+    appearance: none;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    border: 1.5px solid #c9bfb4;
+    border-radius: 4px;
+    background: var(--white);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .task-check:hover,
+  .money-check:hover { border-color: var(--burnt-orange); }
+  .task-check:checked,
+  .money-check:checked {
+    background: var(--burnt-orange) no-repeat center / 12px 12px;
+    border-color: var(--burnt-orange);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3 8.5l3.5 3.5L13 5'/></svg>");
+  }
+  .task-check:disabled,
+  .money-check:disabled { opacity: 0.45; cursor: default; }
+  .row.saving { opacity: 0.5; }
+  .row.done .row-title { text-decoration: line-through; color: #999; }
+  .due-control {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: #777;
+    background: none;
+    border: none;
+    border-bottom: 1px dashed #c9bfb4;
+    padding: 0 0 1px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .due-control:hover { color: var(--burnt-orange); border-bottom-color: var(--burnt-orange); }
+  .due-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 2px 4px;
+    border: 1px solid var(--burnt-orange);
+    border-radius: 4px;
+    outline: none;
+  }
+
+  /* Money actions ask twice. Tasks do not. */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(31, 30, 28, 0.45);
+  }
+  .confirm-box {
+    background: var(--white);
+    border-radius: 10px;
+    padding: 22px 22px 18px;
+    max-width: 380px;
+    width: 100%;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  }
+  .confirm-text {
+    margin: 0 0 18px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--charcoal);
+  }
+  .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .confirm-actions button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 9px 16px;
+    border-radius: 6px;
+    border: 1px solid #d8cfc4;
+    background: var(--white);
+    color: var(--charcoal);
+    cursor: pointer;
+  }
+  .confirm-ok {
+    background: var(--burnt-orange);
+    border-color: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+  }
+
+  /* ---- Calendar view ---- */
+  .view-switch {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    /* Five tabs is one more than four comfortably wrap to on a narrow phone;
+       scrolling beats wrapping to a second row that pushes content down, and
+       beats overflowing the page, which this replaced. */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .view-switch::-webkit-scrollbar { display: none; }
+  .view-btn { flex: none; white-space: nowrap; }
+  .view-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid #ded5c9;
+    background: transparent;
+    color: #7d736a;
+    cursor: pointer;
+  }
+  .view-btn.active { background: var(--denim-blue); border-color: var(--denim-blue); color: var(--white); }
+
+  .calendar-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; align-items: start; }
+
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
+  .cal-title { font-family: 'Fraunces', serif; font-size: 22px; color: var(--charcoal); }
+  .cal-nav { display: flex; gap: 6px; }
+  .cal-nav button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #ded5c9;
+    background: var(--white);
+    color: var(--charcoal);
+    cursor: pointer;
+  }
+  .cal-nav button:hover { border-color: var(--burnt-orange); color: var(--burnt-orange); }
+
+  .cal-grid { background: var(--white); border-radius: 10px; padding: 10px; overflow-x: auto; }
+  .cal-weekdays, .cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .cal-weekdays { margin-bottom: 4px; }
+  .cal-weekday {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #a99e93;
+    text-align: center;
+    padding: 4px 0;
+  }
+  .cal-week { margin-bottom: 4px; }
+  .cal-day {
+    min-height: 92px;
+    border: 1px solid #f0e9e0;
+    border-radius: 6px;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cal-day:hover { border-color: var(--burnt-orange); }
+  .cal-day.outside { background: #fbf8f4; }
+  .cal-day.outside .cal-daynum { color: #c9bfb4; }
+  .cal-day.today { border-color: var(--denim-blue); border-width: 2px; padding: 3px; }
+  .cal-daynum { font-size: 11px; font-variant-numeric: tabular-nums; color: #7d736a; padding: 1px 3px; }
+  .cal-day.today .cal-daynum { color: var(--denim-blue); font-weight: 700; }
+
+  .cal-item {
+    font-size: 10.5px;
+    line-height: 1.25;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border-left: 3px solid;
+    background: #f7f3ee;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  .cal-item-event    { border-color: #4a6fa5; background: #eef2f8; }
+  .cal-item-milestone{ border-color: #7a5ea8; background: #f3eef8; }
+  .cal-item-content  { border-color: #c1502e; background: #fbefe9; }
+  .cal-item-payment  { border-color: #2f8f5b; background: #eaf6ef; }
+  .cal-item-bill     { border-color: #b8912a; background: #fbf4e3; }
+  .cal-more { font-size: 10px; color: #a99e93; padding-left: 4px; }
+
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 11px; color: #7d736a; }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .cal-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  .cal-rail { background: var(--white); border-radius: 10px; padding: 16px; }
+  .cal-rail h3 {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #a99e93;
+    margin-bottom: 10px;
+  }
+  .rail-item { padding: 8px 0; border-bottom: 1px solid #f0e9e0; }
+  .rail-item:last-child { border-bottom: none; }
+  .rail-title { font-size: 12.5px; line-height: 1.35; color: var(--charcoal); }
+  .rail-meta { font-size: 10.5px; color: #a99e93; margin-top: 3px; }
+  .rail-item.saving { opacity: 0.5; }
+  .rail-schedule {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10.5px;
+    margin-top: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px dashed #c9bfb4;
+    background: none;
+    color: #7d736a;
+    cursor: pointer;
+  }
+  .rail-schedule:hover { border-color: var(--burnt-orange); color: var(--burnt-orange); border-style: solid; }
+
+  .cal-create { margin-top: 12px; }
+  .cal-create input, .cal-create select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border: 1px solid #ded5c9;
+    border-radius: 6px;
+    outline: none;
+    background: var(--white);
+    color: var(--charcoal);
+  }
+  .cal-create input:focus, .cal-create select:focus { border-color: var(--burnt-orange); }
+  .cal-create .cal-create-actions { display: flex; gap: 8px; }
+  .cal-create button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid #ded5c9;
+    background: var(--white);
+    color: var(--charcoal);
+    cursor: pointer;
+  }
+  .cal-create button.primary {
+    background: var(--burnt-orange);
+    border-color: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+  }
+
+  @media (max-width: 900px) {
+    .calendar-layout { grid-template-columns: minmax(0, 1fr); }
+    .cal-day { min-height: 68px; }
+    .cal-item { font-size: 9.5px; }
+    .cal-create input, .cal-create select { font-size: 16px; }
+  }
+
+  /* ---- Four-tab shell ---- */
+  .view-btn .tab-count {
+    display: inline-block;
+    margin-left: 7px;
+    background: var(--burnt-orange);
+    color: var(--white);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+  }
+  .view-btn.active .tab-count { background: var(--white); color: var(--denim-blue); }
+
+  /* Big-number tiles. The old vitals row showed four small numbers; these show
+     three that each answer a question, with the bar carrying the proportion. */
+  .figure-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-bottom: 26px; }
+
+  .annual-figure-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+  .annual-figure-row .figure-num { font-size: 28px; }
+  .annual-chart-wrap { background: var(--white); }
+  .annual-chart { width: 100%; height: auto; display: block; }
+  .annual-chart-grid { stroke: var(--linen); stroke-width: 1; }
+  .annual-chart-axis { font-family: 'DM Sans', sans-serif; font-size: 10px; fill: #a99e93; }
+  .annual-chart-bar { fill: var(--denim-blue); }
+  .annual-chart-line { stroke: var(--burnt-orange); stroke-width: 2; }
+  .annual-chart-dot { fill: var(--burnt-orange); }
+  .figure {
+    background: var(--white);
+    border-radius: 6px;
+    padding: 22px;
+    box-shadow: 0 2px 10px rgba(30,30,30,0.05);
+  }
+  .figure.tinted { background: var(--denim-soft); }
+  .figure.warn { background: var(--yellow-soft); }
+  .figure-label {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--denim-blue);
+    margin-bottom: 14px;
+  }
+  .figure.warn .figure-label { color: #8a5a1a; }
+  .figure-main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .figure-num { font-family: Georgia, serif; font-size: 38px; line-height: 1; color: var(--burnt-orange); }
+  .figure.tinted .figure-num { color: var(--denim-blue); }
+  .figure.warn .figure-num { color: #8a5a1a; }
+  .figure-of { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #7d736a; }
+  .figure-track { background: var(--linen); height: 10px; border-radius: 6px; overflow: hidden; margin: 14px 0 8px; }
+  .figure.tinted .figure-track, .figure.warn .figure-track { background: rgba(255,255,255,0.6); }
+  .figure-fill { background: var(--burnt-orange); height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+  .figure-note { font-size: 13px; color: #7d736a; line-height: 1.45; }
+  .figure.warn .figure-note { color: #6d5623; }
+  .figure-badge {
+    display: inline-block;
+    margin: 14px 0 8px;
+    background: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .figure-badge.good { color: #2f6b4a; }
+  .figure-badge.short { color: var(--burnt-orange); }
+
+  /* Card header with an add button */
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--linen);
+  }
+  .card-head h2 { margin: 0; padding: 0; border: none; }
+  .card-head-right { display: flex; align-items: center; gap: 10px; }
+  .card-sub { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #7d736a; }
+  .add-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    border: 1px solid #e2d7c9;
+    background: var(--linen);
+    color: var(--burnt-orange);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex: none;
+  }
+  .add-btn:hover { border-color: var(--burnt-orange); background: var(--orange-soft); }
+
+  /* Money rows carry an amount on the right */
+  .amount { font-family: Georgia, serif; font-size: 18px; color: var(--dark-text); flex: none; }
+  .row.dim { opacity: 0.72; }
+  .net-box { margin-top: 16px; padding: 14px 16px; background: var(--linen); border-radius: 5px; }
+  .net-num { font-family: Georgia, serif; font-size: 26px; }
+  .net-num.up { color: #2f6b4a; }
+  .net-num.down { color: var(--burnt-orange); }
+
+  /* The one urgent thing */
+  .urgent-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--burnt-orange);
+    color: var(--white);
+    border-radius: 6px;
+    padding: 16px 22px;
+    margin-bottom: 22px;
+  }
+  .urgent-bar .urgent-title { font-size: 17px; font-weight: 600; }
+  .urgent-bar .urgent-sub { font-family: 'DM Sans', sans-serif; font-size: 12.5px; opacity: 0.9; margin-top: 3px; }
+  .urgent-bar button {
+    background: var(--white);
+    color: var(--burnt-orange);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border-radius: 4px;
+    flex: none;
+  }
+
+  .day-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #7d736a;
+    margin: 18px 0 2px;
+  }
+  .day-label.today { color: var(--burnt-orange); }
+  .day-label:first-of-type { margin-top: 10px; }
+
+  .work-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 20px; align-items: start; }
+  .work-rail { display: flex; flex-direction: column; gap: 20px; }
+
+  .ticket-group { padding: 12px 0; border-bottom: 1px solid var(--linen); }
+  .ticket-group:last-child { border-bottom: none; }
+  .ticket-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .ticket-count { font-family: Georgia, serif; font-size: 17px; flex: none; }
+  .ticket-count.hot { color: var(--burnt-orange); }
+
+  /* Clients timeline */
+  .timeline-head, .timeline-row { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: center; }
+  .timeline-row { padding: 9px 0; border-top: 1px solid var(--linen); }
+  .timeline-months { display: grid; grid-template-columns: repeat(3, 1fr); font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a99e93; }
+  .timeline-months span { border-left: 1px solid #f0e9e0; padding: 0 0 6px 8px; }
+  .timeline-name { font-size: 14.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .timeline-phase { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: #7d736a; margin-top: 3px; }
+  .track { position: relative; height: 34px; }
+  .track-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .track-grid span { border-left: 1px solid #f7f2ea; }
+  .track-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 6px; border-radius: 3px; background: var(--orange-soft); }
+  .track-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--white); }
+  .track-end { position: absolute; top: 50%; transform: translateY(-50%); font-family: 'DM Sans', sans-serif; font-size: 10.5px; color: #7d736a; white-space: nowrap; padding-left: 14px; }
+  .track-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--burnt-orange); opacity: 0.5; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: #7d736a; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  /* Inline add form, used by every + button */
+  .add-form { margin-top: 14px; padding: 16px; background: var(--linen); border-radius: 6px; }
+  .add-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .add-form input, .add-form select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid #ded5c9;
+    border-radius: 5px;
+    outline: none;
+    background: var(--white);
+    color: var(--dark-text);
+  }
+  .add-form input:focus, .add-form select:focus { border-color: var(--burnt-orange); }
+  .add-form-actions { display: flex; gap: 8px; }
+  .add-form button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 9px 15px;
+    border-radius: 5px;
+    border: 1px solid #ded5c9;
+    background: var(--white);
+    color: var(--dark-text);
+  }
+  .add-form button.primary { background: var(--burnt-orange); border-color: var(--burnt-orange); color: var(--white); font-weight: 600; }
+  .add-form .field-error { font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--burnt-orange); margin-bottom: 8px; }
+
+  @media (max-width: 900px) {
+    .figure-row { grid-template-columns: 1fr; gap: 14px; }
+    .annual-figure-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .annual-figure-row .figure-num { font-size: 22px; }
+    .work-grid { grid-template-columns: minmax(0, 1fr); }
+    .timeline-head, .timeline-row { grid-template-columns: 130px minmax(0, 1fr); gap: 10px; }
+    .timeline-name { font-size: 13px; }
+    .add-form input, .add-form select { font-size: 16px; }
+    .add-form-row { grid-template-columns: 1fr; }
+  }
+
+  /* ---- Budget + debt ---- */
+  .budget-group-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #a99e93;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin: 20px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--linen);
+  }
+  .budget-group-label:first-of-type { margin-top: 6px; }
+  .budget-group-label .group-total { color: #7d736a; font-variant-numeric: tabular-nums; }
+
+  .budget-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 92px;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--linen);
+  }
+  .budget-row:last-child { border-bottom: none; }
+  .budget-name { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .budget-bar { background: var(--linen); height: 5px; border-radius: 3px; overflow: hidden; margin-top: 6px; max-width: 320px; }
+  .budget-bar span { display: block; height: 100%; border-radius: 3px; background: var(--burnt-orange); }
+  .budget-bar span.over { background: #b3402a; }
+  .budget-bar span.under { background: #2f6b4a; }
+  .budget-cell { text-align: right; font-family: Georgia, serif; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .budget-cell.muted { color: #a99e93; font-family: 'DM Sans', sans-serif; font-size: 12px; }
+  .budget-cell.over { color: #b3402a; }
+  .budget-cell.under { color: #2f6b4a; }
+  .budget-head-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 92px;
+    gap: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #a99e93;
+    text-align: right;
+  }
+  .budget-head-row span:first-child { text-align: left; }
+
+  /* The editable budget amount, styled like the due-date control elsewhere */
+  .budget-edit {
+    font-family: Georgia, serif;
+    font-size: 15px;
+    color: var(--dark-text);
+    background: none;
+    border: none;
+    border-bottom: 1px dashed #c9bfb4;
+    padding: 0 0 1px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .budget-edit:hover { color: var(--burnt-orange); border-bottom-color: var(--burnt-orange); }
+  .budget-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    width: 84px;
+    padding: 3px 6px;
+    text-align: right;
+    border: 1px solid var(--burnt-orange);
+    border-radius: 4px;
+    outline: none;
+  }
+
+  .budget-note-edit {
+    display: block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11.5px;
+    color: #9a8f83;
+    background: none;
+    border: none;
+    padding: 3px 0 0;
+    cursor: pointer;
+    text-align: left;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .budget-note-edit.empty { font-style: italic; }
+  .budget-note-edit:hover { color: var(--burnt-orange); }
+  .budget-note-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    width: 100%;
+    max-width: 320px;
+    margin-top: 4px;
+    padding: 5px 7px;
+    border: 1px solid var(--burnt-orange);
+    border-radius: 4px;
+    outline: none;
+    resize: vertical;
+  }
+
+  /* Told-you-plainly banner for a missing integration */
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--yellow-soft);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+  .notice svg { flex: none; margin-top: 1px; }
+  .notice-text { font-size: 13.5px; color: #6d5623; line-height: 1.5; }
+
+  .debt-row { padding: 14px 0; border-bottom: 1px solid var(--linen); }
+  .debt-row:last-child { border-bottom: none; }
+  .debt-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .debt-name { font-size: 15px; }
+  .debt-balance { font-family: Georgia, serif; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .debt-bar { background: var(--linen); height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 6px; }
+  .debt-bar span { display: block; height: 100%; border-radius: 4px; background: #2f6b4a; }
+  .debt-row .add-form { margin-top: 10px; }
+
+  @media (max-width: 900px) {
+    .budget-row, .budget-head-row { grid-template-columns: minmax(0, 1fr) 78px 78px; gap: 8px; }
+    .budget-name { font-size: 13.5px; }
+    .budget-cell { font-size: 14px; }
+    .budget-input { font-size: 16px; width: 76px; }
+  }
+
+  /* ---- Calendar: day / week / month + flyout ---- */
+  .cal-modes { display: flex; gap: 4px; background: var(--white); padding: 3px; border-radius: 999px; border: 1px solid #e2d7c9; }
+  .cal-mode {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: transparent;
+    color: #7d736a;
+    border: none;
+  }
+  .cal-mode.active { background: var(--denim-blue); color: var(--white); }
+
+  /* Week view: same 7 columns, but tall enough to stop hiding things. */
+  .cal-week-view .cal-day { min-height: 340px; }
+  .cal-week-view .cal-item { font-size: 11.5px; }
+
+  /* Day view: one column, everything in full. */
+  .cal-day-view { background: var(--white); border-radius: 6px; padding: 22px; box-shadow: 0 2px 10px rgba(30,30,30,0.05); }
+  .day-entry { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--linen); }
+  .day-entry:last-child { border-bottom: none; }
+  .day-entry-mark { width: 4px; border-radius: 2px; flex: none; }
+  .day-entry-body { flex: 1; min-width: 0; }
+  .day-entry-title { font-size: 15px; line-height: 1.35; }
+  .day-entry-meta { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #7d736a; margin-top: 3px; }
+  /* Same saving/done feedback the Money and Work tabs use for .row, so a
+     checkbox or due-date edit inside the flyout looks like it did something
+     rather than silently succeeding. */
+  .day-entry.saving { opacity: 0.5; }
+  .day-entry.done .day-entry-title { text-decoration: line-through; color: #999; }
+  .day-kind {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    flex: none;
+    align-self: flex-start;
+  }
+
+  /* Flyout — the answer to "I cannot read the day from a grid cell". */
+  .flyout-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(31, 30, 28, 0.35);
+    z-index: 55;
+  }
+  .flyout {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 420px;
+    max-width: 100%;
+    background: var(--linen);
+    z-index: 56;
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.16);
+    display: flex;
+    flex-direction: column;
+    animation: flyout-in 0.16s ease-out;
+  }
+  @keyframes flyout-in { from { transform: translateX(16px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .flyout { animation: none; } }
+  .flyout-head {
+    background: var(--denim-blue);
+    color: var(--white);
+    padding: 20px 22px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex: none;
+  }
+  .flyout-date { font-family: Georgia, serif; font-size: 22px; }
+  .flyout-sub { font-family: 'DM Sans', sans-serif; font-size: 12px; opacity: 0.8; margin-top: 4px; }
+  .flyout-close {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--white);
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    padding: 0;
+  }
+  .flyout-close:hover { background: rgba(255, 255, 255, 0.28); }
+  .flyout-body { flex: 1; overflow-y: auto; padding: 18px 22px 24px; }
+  .flyout-body .card { margin-bottom: 16px; }
+  .flyout-body .add-form { margin-top: 0; }
+
+  @media (max-width: 640px) {
+    /* A bottom sheet reads better than a side panel on a phone. */
+    .flyout {
+      top: auto;
+      left: 0;
+      right: 0;
+      height: 82vh;
+      height: 82dvh;
+      width: auto;
+      border-radius: 12px 12px 0 0;
+      animation: sheet-in 0.18s ease-out;
+    }
+    @keyframes sheet-in { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+    .cal-week-view .cal-day { min-height: 210px; }
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: var(--denim-blue);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(30,30,30,0.25);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 60;
+    max-width: calc(100vw - 32px);
+  }
+  .toast button {
+    background: none;
+    color: var(--sunset-yellow);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 0;
+  }
+  .toast.error { background: var(--burnt-orange); }
+
+  /* Sign-in gate */
+  .gate {
+    position: fixed;
+    inset: 0;
+    background: var(--denim-blue);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 24px;
+  }
+  .gate.visible { display: flex; }
+  .gate-card {
+    background: var(--white);
+    border-radius: 6px;
+    padding: 32px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  }
+  .gate-card .eyebrow { color: var(--burnt-orange); margin-bottom: 8px; }
+  .gate-card h2 { font-size: 26px; margin-bottom: 18px; }
+  .gate-card input {
+    width: 100%;
+    font-family: 'Questrial', sans-serif;
+    font-size: 15px;
+    padding: 11px 13px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    outline: none;
+    margin-bottom: 12px;
+  }
+  .gate-card input:focus { border-color: var(--burnt-orange); }
+  .gate-card button {
+    width: 100%;
+    background: var(--burnt-orange);
+    color: var(--white);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding: 12px;
+    border-radius: 4px;
+  }
+  .gate-error { font-size: 13px; color: var(--burnt-orange); margin-top: 10px; min-height: 18px; }
+
+  /* Long client names, task titles, and pasted URLs must wrap rather than
+     push the page sideways. */
+  .row-title, .row-sub, .msg, .vital-label, #focusText { overflow-wrap: anywhere; }
+
+  @media (max-width: 900px) {
+    /* The chat panel is a full tab on mobile, so a fixed 640px box pushes the
+       composer below the fold. Size it to the space left under the header,
+       focus banner, and tabs so the input is always reachable without
+       scrolling. dvh tracks the collapsing browser chrome; vh is the fallback. */
+    .chat-panel {
+      position: static;
+      height: calc(100vh - 330px);
+      height: calc(100dvh - 330px);
+      min-height: 320px;
+    }
+    /* Below 16px, iOS zooms the whole page when a field takes focus. */
+    #chatInput, .gate-card input, .due-input { font-size: 16px; }
+    /* Confirm is the last thing between a tap and a write, so give it room. */
+    .confirm-actions button { padding: 12px 18px; font-size: 15px; }
+  }
+
+  @media (max-width: 600px) {
+    header { padding: 22px 18px 20px; }
+    header h1 { font-size: 28px; }
+    .focus-banner, .layout { padding-left: 18px; padding-right: 18px; }
+    .layout { margin-top: 22px; gap: 18px; }
+    .focus-inner { padding: 16px 18px; }
+    #focusText { font-size: 18px; }
+    .card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <form class="gate-card" id="gateForm">
+    <div class="eyebrow">Solution Integrators — Internal</div>
+    <h2>Home Base</h2>
+    <input type="password" id="gatePassword" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div class="gate-error" id="gateError"></div>
+  </form>
+</div>
+
+<header>
+  <div class="header-top">
+    <div>
+      <div class="eyebrow">Solution Integrators — Internal</div>
+      <h1>Home Base</h1>
+    </div>
+    <div class="refresh-block">
+      <div class="as-of" id="asOfLabel">Not loaded yet</div>
+      <button class="refresh-btn" id="refreshBtn">Refresh</button>
+    </div>
+  </div>
+</header>
+
+<div class="focus-banner">
+  <div class="focus-inner">
+    <div class="eyebrow">Focus</div>
+    <div id="focusText" contenteditable="true" data-placeholder="Click to set what matters most right now..."></div>
+    <div class="focus-hint">Click to edit. Saves automatically.</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="view-switch">
+    <button class="view-btn active" data-view="money" id="viewMoneyBtn">Money</button>
+    <button class="view-btn" data-view="work" id="viewWorkBtn">Work</button>
+    <button class="view-btn" data-view="clients" id="viewClientsBtn">Clients</button>
+    <button class="view-btn" data-view="calendar" id="viewCalBtn">Calendar</button>
+    <button class="view-btn" data-view="chat" id="viewChatBtn">Chat</button>
+  </div>
+
+  <div id="dashboardCol">
+    <div class="dashboard-grid" id="moneyView"></div>
+    <div class="dashboard-grid" id="workView" hidden></div>
+    <div class="dashboard-grid" id="clientsView" hidden></div>
+    <div class="calendar-view" id="calendarView" hidden></div>
+  </div>
+
+  <div id="chatCol" hidden>
+    <div class="chat-panel">
+      <div class="chat-header">
+        <h2>Ask about your projects</h2>
+        <p>Pulls live from ClickUp, Calendar, Airtable, and your portal</p>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-empty">Ask things like "what's the status on the Comma Mama project" or "what's overdue right now." This reads your tools — it can't create or change anything.</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" rows="1" placeholder="Ask about a client or project..."></textarea>
+        <button class="send-btn" id="sendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+
+</body>
+</html>

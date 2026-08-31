@@ -1,0 +1,135 @@
+// The filter tests cover the rules; these cover the handlers themselves.
+// A missing import inside a route only throws when that route actually runs,
+// which unit tests over pure functions will never notice — that is how
+// "localDate is not defined" reached a deployed dashboard.
+//
+// With no credentials every upstream call fails at its requireVar check before
+// any network access, so these run offline and finish in milliseconds.
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { handleTasks } from "../src/routes/tasks.js";
+import { handleCalendar, calendarConfigured } from "../src/routes/calendar.js";
+import { handleMoney, handleMoneyAnnual } from "../src/routes/money.js";
+
+// Mirrors the non-secret vars in wrangler.toml. Without the base ids the
+// fetches short-circuit before ever reaching a credential check, which makes
+// the test pass for the wrong reason.
+const env = {
+  TIMEZONE: "America/Chicago",
+  REVENUE_GOAL: "5000",
+  CLICKUP_TEAM_ID: "8619174",
+  AIRTABLE_MONEY_BASE_ID: "appfVpfMqptf35xRa",
+  AIRTABLE_INCOME_TABLE: "Income Tracking",
+  AIRTABLE_INVOICE_TABLE: "Invoice Tracking",
+  AIRTABLE_PROJECTS_TABLE: "ALL Active Projects",
+  AIRTABLE_BILLS_BASE_ID: "appQeUH0Lb6i3lxTL",
+  AIRTABLE_BILLS_TABLE: "Recurring Items",
+  AIRTABLE_BILLS_PAID_THROUGH_FIELD: "Paid Through",
+  CLICKUP_CONTENT_LIST_ID: "901414048215",
+  AIRTABLE_GOALS_TABLE: "Weekly Revenue Goals",
+  AIRTABLE_CONTENT_BASE_ID: "appzyaY40KNIy3n4t",
+  AIRTABLE_CONTENT_TABLE: "Social Media Management",
+};
+const ctx = { waitUntil() {} };
+
+for (const [name, handler, expectedKeys] of [
+  ["tasks", handleTasks, ["myTasksSoon", "overdue", "overdueCount", "urgent", "readyForReview", "supportTickets", "clientProjects", "contentPipeline"]],
+  ["calendar", handleCalendar, ["nextCalls", "calendarToday", "calendarWeek"]],
+  ["money", handleMoney, ["revenue", "month", "upcomingPayments", "upcomingBills", "week"]],
+  ["money/annual", handleMoneyAnnual, ["year", "months", "annualSales", "projectedTotal", "goalTotal", "distanceToGoal", "averageMonthlySales"]],
+]) {
+  test(`${name} endpoint answers with its full shape when every source is unconfigured`, async () => {
+    const response = await handler(env, ctx);
+    assert.equal(response.status, 200, `${name} should degrade, not fail`);
+    const body = await response.json();
+    for (const key of expectedKeys) {
+      assert.ok(key in body, `${name} payload is missing ${key}`);
+    }
+    assert.ok(Array.isArray(body.warnings), `${name} should report which sources failed`);
+  });
+}
+
+test("a dead source is named in warnings rather than swallowed", async () => {
+  const body = await (await handleMoney(env, ctx)).json();
+  assert.ok(
+    body.warnings.some((warning) => warning.includes("AIRTABLE_TOKEN")),
+    "the missing credential should be named",
+  );
+});
+
+test("the calendar is absent, not broken, when it is switched off", async () => {
+  const body = await (await handleCalendar(env, ctx)).json();
+  assert.equal(body.calendarConfigured, false);
+  assert.deepEqual(body.warnings, []);
+});
+
+test("CALENDAR_ENABLED=false wins even if Google credentials are present", async () => {
+  const withGoogle = {
+    ...env,
+    CALENDAR_ENABLED: "false",
+    GOOGLE_CLIENT_ID: "id",
+    GOOGLE_CLIENT_SECRET: "secret",
+    GOOGLE_REFRESH_TOKEN: "token",
+  };
+  const body = await (await handleCalendar(withGoogle, ctx)).json();
+  assert.equal(body.calendarConfigured, false);
+});
+
+test("turning the flag on without the Google secrets hides the calendar, not breaks it", async () => {
+  // wrangler.toml now ships CALENDAR_ENABLED = "true", so this is the state a
+  // deploy lands in before the secrets are set. It must stay silent rather
+  // than render a permanent error card.
+  for (const missing of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]) {
+    const partial = {
+      ...env,
+      CALENDAR_ENABLED: "true",
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REFRESH_TOKEN: "token",
+    };
+    delete partial[missing];
+    const body = await (await handleCalendar(partial, ctx)).json();
+    assert.equal(body.calendarConfigured, false, `${missing} missing should hide the calendar`);
+    assert.deepEqual(body.warnings, [], `${missing} missing should not warn`);
+  }
+});
+
+test("the flag plus all three secrets is what actually turns the calendar on", () => {
+  assert.equal(
+    calendarConfigured({
+      CALENDAR_ENABLED: "true",
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REFRESH_TOKEN: "token",
+    }),
+    true,
+  );
+});
+
+test("the tabs get the shapes they render, not just the keys", async () => {
+  // Each tab reads a specific sub-shape. A rename upstream would leave the key
+  // present and the tab blank, which is the failure these guard against.
+  const money = await (await handleMoney(env, ctx)).json();
+  assert.equal(typeof money.revenue.goal, "number");
+  assert.equal(typeof money.revenue.current, "number");
+  assert.equal(typeof money.week.start, "string");
+  assert.equal(typeof money.week.end, "string");
+  // month is null when the summary table is unreachable — the tab drops the
+  // tile rather than rendering NaN.
+  assert.ok(money.month === null || typeof money.month.projectedToGoal === "number");
+
+  const tasks = await (await handleTasks(env, ctx)).json();
+  assert.ok(Array.isArray(tasks.overdue));
+  assert.ok(Array.isArray(tasks.urgent));
+  assert.equal(typeof tasks.overdueCount, "number");
+  assert.ok(Array.isArray(tasks.supportTickets.byClient));
+  assert.equal(typeof tasks.supportTickets.openCount, "number");
+  assert.ok(Array.isArray(tasks.clientProjects));
+
+  const annual = await (await handleMoneyAnnual(env, ctx, new URL("https://x/api/dashboard/money/annual?year=2026"))).json();
+  assert.equal(annual.year, 2026);
+  assert.equal(annual.months.length, 12);
+  assert.equal(typeof annual.annualSales, "number");
+  assert.equal(typeof annual.distanceToGoal, "number");
+});

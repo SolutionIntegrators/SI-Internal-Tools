@@ -1,0 +1,150 @@
+name = "homebase"
+main = "src/index.js"
+compatibility_date = "2026-08-16"
+compatibility_flags = ["nodejs_compat"]
+
+# One public URL, not one per version. Everything behind /api needs the session
+# cookie either way, but there is no reason to hand out extra addresses.
+workers_dev = true
+preview_urls = false
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# /api/* never matches a static file, but say so explicitly so a future
+# public/api/... file can't shadow the API.
+run_worker_first = ["/api/*"]
+
+[observability]
+enabled = true
+
+# Optional: the last-good-snapshot cache. Create it with
+#   npx wrangler kv namespace create SNAPSHOTS
+# then paste the id below and uncomment. Without it the dashboard still works,
+# it just waits for live data on every load.
+# [[kv_namespaces]]
+# binding = "SNAPSHOTS"
+# id = "PASTE_KV_NAMESPACE_ID"
+
+# Non-secret configuration. Secrets go in `wrangler secret put` — never here.
+[vars]
+TIMEZONE = "America/Chicago"
+REVENUE_GOAL = "5000"
+# low | medium | high — how hard Claude works on a chat answer.
+CHAT_EFFORT = "medium"
+
+# --- ClickUp -----------------------------------------------------------------
+CLICKUP_TEAM_ID = "8619174"
+# Scope by folder so a new client list is picked up without a config change.
+# Client Projects (one list per engagement) + Ops Management (internal work).
+CLICKUP_WORK_FOLDER_IDS = "90147460136,44205760"
+CLICKUP_WORK_LIST_IDS = ""
+# Client Support Requests. The Support folder also holds The Goodies Shop and
+# Repeat Client Project Requests — add folder 39953826 here instead if those
+# should count as tickets too.
+CLICKUP_SUPPORT_LIST_IDS = "900601724895"
+# The content pipeline reads this list directly rather than the Airtable table
+# downstream of it, so items show up while they are being made, not after.
+CLICKUP_CONTENT_LIST_ID = "901414048215"
+CLICKUP_SUPPORT_FOLDER_IDS = ""
+# Only needed if the API token belongs to someone other than Ashley.
+CLICKUP_USER_ID = ""
+READY_FOR_REVIEW_STATUSES = "ready for review,in review,review"
+# "resolved" is what Client Support Requests uses for a finished ticket, and
+# ClickUp does not type it as closed — without it here every resolved ticket
+# counted as open and the ticket number read ~100 instead of 8.
+CLOSED_STATUSES = "complete,closed,done,cancelled,canceled,resolved"
+
+# --- Google Calendar (on) -----------------------------------------------------
+# This flag is only half the switch: the section also needs all three GOOGLE_
+# secrets. Missing any of them leaves the calendar out of the dashboard entirely
+# rather than showing a broken card, so "true" here is safe on its own.
+# Set the secrets with `npm run google-auth` then `wrangler secret put`.
+CALENDAR_ENABLED = "true"
+GOOGLE_CALENDAR_ID = "primary"
+
+# --- Airtable: SI Money Metrics (appfVpfMqptf35xRa) ----------------------------
+# Revenue comes from Income Tracking; money still owed comes from Invoice Tracking.
+AIRTABLE_MONEY_BASE_ID = "appfVpfMqptf35xRa"
+AIRTABLE_INCOME_TABLE = "Income Tracking"
+AIRTABLE_INCOME_DATE_FIELD = "Date"
+AIRTABLE_INCOME_AMOUNT_FIELD = "Payment Amount"
+AIRTABLE_INCOME_STATUS_FIELD = "Status"
+# Status is blank on most Income Tracking rows, so the rule is "count it unless
+# it is explicitly marked unpaid" rather than "count it only if marked paid".
+AIRTABLE_INCOME_EXCLUDE_STATUSES = "Unpaid"
+AIRTABLE_INVOICE_TABLE = "Invoice Tracking"
+AIRTABLE_INVOICE_SUMMARY_FIELD = "Summary"
+AIRTABLE_INVOICE_STATUS_FIELD = "Status"
+AIRTABLE_INVOICE_DUE_FIELD = "Due Date"
+AIRTABLE_INVOICE_AMOUNT_FIELD = "Payment Amount"
+AIRTABLE_INVOICE_TOTAL_FIELD = "Invoice Total"
+# The client roster for the Client Projects card.
+AIRTABLE_PROJECTS_TABLE = "ALL Active Projects"
+# One row per month, already carrying the goal, the actual and the projected
+# close. The dashboard reads these rather than recomputing them so it can never
+# disagree with the Airtable interface built on the same table.
+AIRTABLE_SUMMARY_TABLE = "Solution Integrators Financial Summary"
+AIRTABLE_BUDGETS_TABLE = "Category Budgets"
+AIRTABLE_DEBTS_TABLE = "Debts"
+AIRTABLE_DEBT_NOTES_FIELD = "Notes"
+# Where this month's actual spend comes from. Deliberately empty: the Airtable
+# expense tables stopped being written to in 2023, and summing them would show
+# $0 against every budget — which reads as "under budget" rather than "not
+# connected". Set to "airtable-expenses" only once something writes to them
+# again. The real 2026 numbers are in QuickBooks.
+BUDGET_ACTUALS_SOURCE = ""
+AIRTABLE_PROJECT_NAME_FIELD = "Company Name"
+AIRTABLE_PROJECT_STATUS_FIELD = "Project Status"
+AIRTABLE_PROJECT_SERVICE_FIELD = "Service"
+AIRTABLE_PROJECT_IMPLEMENTATION_FIELD = "5️⃣ Implementation"
+AIRTABLE_PROJECT_SUPPORT_END_FIELD = "Support End"
+AIRTABLE_PROJECT_ONGOING_VALUE = "Ongoing Support"
+
+# --- Airtable: 99 Problems But Money Aint One (appQeUH0Lb6i3lxTL) --------------
+# Bills are recurrence rules, not dated rows — src/lib/recurrence.js expands them.
+AIRTABLE_BILLS_BASE_ID = "appQeUH0Lb6i3lxTL"
+AIRTABLE_BILLS_TABLE = "Recurring Items"
+AIRTABLE_BILLS_PAID_THROUGH_FIELD = "Paid Through"
+AIRTABLE_BILLS_NAME_FIELD = "Name"
+AIRTABLE_BILLS_AMOUNT_FIELD = "Amount"
+AIRTABLE_BILLS_TYPE_FIELD = "Type"
+AIRTABLE_BILLS_EXPENSE_VALUE = "Expense"
+AIRTABLE_BILLS_BOOK_FIELD = "Book"
+AIRTABLE_BILLS_ACTIVE_FIELD = "Active"
+AIRTABLE_BILLS_FREQUENCY_FIELD = "Frequency"
+AIRTABLE_BILLS_DAY_FIELD = "Day of Month"
+AIRTABLE_BILLS_WEEKDAY_FIELD = "Weekday"
+AIRTABLE_BILLS_ANCHOR_FIELD = "Anchor or One-Time Date"
+# Which books to show bills from. Empty means all three (Solution Integrators,
+# Tindall Tech, Household). Set to "Solution Integrators" for business only.
+AIRTABLE_BILLS_BOOKS = ""
+
+# This week's revenue target, read live so changing it in Airtable changes the
+# dashboard. REVENUE_GOAL above is the fallback when the week has no row yet.
+AIRTABLE_GOALS_TABLE = "Weekly Revenue Goals"
+AIRTABLE_GOALS_WEEK_FIELD = "Week Start Date"
+AIRTABLE_GOALS_AMOUNT_FIELD = "Goal Amount"
+
+# --- Airtable: Solution Integrators Content Hub (appzyaY40KNIy3n4t) -----------
+AIRTABLE_CONTENT_BASE_ID = "appzyaY40KNIy3n4t"
+AIRTABLE_CONTENT_TABLE = "Social Media Management"
+AIRTABLE_CONTENT_TITLE_FIELD = "🛑 Name"
+AIRTABLE_CONTENT_STATUS_FIELD = "‼️ Status"
+AIRTABLE_CONTENT_TYPE_FIELD = "🛑 Content Type"
+AIRTABLE_CONTENT_DATE_FIELD = "Date to Be Posted"
+
+# --- Supabase ----------------------------------------------------------------
+# Optional. The dashboard does not need Supabase — client projects come from
+# Airtable above. Set these only to let the chat panel answer portal and LMS
+# questions; leaving SUPABASE_URL empty drops the service_role key entirely.
+SUPABASE_URL = ""
+# Tables the chat panel may read. Empty means any table it names.
+SUPABASE_TABLES = ""
+SUPABASE_SEARCH_COLUMNS = "name,title,email,status"
+# Only used if the Airtable projects table above is cleared.
+SUPABASE_PROJECTS_TABLE = ""
+SUPABASE_PROJECT_NAME_FIELD = "name"
+SUPABASE_PROJECT_PHASE_FIELD = "phase"
+SUPABASE_PROJECT_STATUS_FIELD = "status"
+SUPABASE_PROJECT_NOTE_FIELD = "note"
