@@ -10,6 +10,14 @@ let status = { tasks: "idle", calendar: "idle", money: "idle" };
 let errors = { tasks: null, calendar: null, money: null };
 let chatHistory = [];
 
+// The annual chart is its own fetch, keyed by year rather than tied to the
+// money section's refresh cycle — switching years shouldn't re-pull revenue,
+// invoices, and bills that have nothing to do with the year in view.
+let annualYear = new Date().getFullYear();
+let annualStatus = "loading";
+let annualError = null;
+const annualCache = new Map(); // year -> payload
+
 const $ = (id) => document.getElementById(id);
 
 // ---------- Fetch ----------
@@ -62,6 +70,29 @@ async function refresh() {
   await Promise.allSettled(SECTIONS.map((key) => loadSection(key)));
   button.disabled = false;
   button.textContent = "Refresh";
+}
+
+async function loadAnnual(year) {
+  annualYear = year;
+  const cached = annualCache.get(year);
+  if (cached) {
+    annualStatus = "done";
+    annualError = null;
+    render();
+    return;
+  }
+  annualStatus = "loading";
+  annualError = null;
+  render();
+  try {
+    const data = await api(`/api/dashboard/money/annual?year=${year}`);
+    annualCache.set(year, data);
+    annualStatus = "done";
+  } catch (err) {
+    annualStatus = "error";
+    annualError = err.message;
+  }
+  render();
 }
 
 function updateAsOf() {
@@ -239,6 +270,119 @@ function figure({ label, value, of, pct, note, badge, badgeClass, tone }) {
   return card;
 }
 
+/**
+ * A compact $ label for the chart's y-axis — "$20k" reads faster than
+ * "$20,000" at that size, and the axis only needs the shape of the numbers.
+ */
+function shortMoney(n) {
+  const rounded = Math.round(n);
+  if (Math.abs(rounded) >= 1000) return `$${Math.round(rounded / 1000)}k`;
+  return money(rounded);
+}
+
+const ANNUAL_CHART = { w: 760, h: 220, padL: 46, padR: 12, padT: 14, padB: 26 };
+
+/**
+ * Bars for actual, a line for projected — the same two series Airtable's own
+ * "Year over Year Stats" chart plots, at whatever scale the year's numbers
+ * need rather than a fixed axis.
+ */
+function annualChart(months) {
+  const { w, h, padL, padR, padT, padB } = ANNUAL_CHART;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+  const maxVal = Math.max(1, ...months.map((m) => Math.max(m.actual, m.projected))) * 1.12;
+  const slot = plotW / months.length;
+  const barW = Math.min(30, slot * 0.5);
+
+  const yFor = (v) => padT + plotH - (v / maxVal) * plotH;
+  const xFor = (i) => padL + i * slot + slot / 2;
+
+  const grid = [0, 0.25, 0.5, 0.75, 1]
+    .map((f) => {
+      const y = padT + plotH * (1 - f);
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" class="annual-chart-grid"/>
+        <text x="${padL - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="annual-chart-axis">${escapeHtml(shortMoney(maxVal * f))}</text>`;
+    })
+    .join("");
+
+  const bars = months
+    .map((m, i) => {
+      const x = xFor(i) - barW / 2;
+      const y = yFor(m.actual);
+      const barH = Math.max(0, padT + plotH - y);
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="2" class="annual-chart-bar"><title>${escapeHtml(m.month)}: ${money(m.actual)} actual</title></rect>`;
+    })
+    .join("");
+
+  const points = months.map((m, i) => `${xFor(i).toFixed(1)},${yFor(m.projected).toFixed(1)}`).join(" ");
+  const dots = months
+    .map(
+      (m, i) =>
+        `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(m.projected).toFixed(1)}" r="3" class="annual-chart-dot"><title>${escapeHtml(m.month)}: ${money(m.projected)} projected</title></circle>`,
+    )
+    .join("");
+
+  const labels = months
+    .map((m, i) => `<text x="${xFor(i).toFixed(1)}" y="${h - 8}" text-anchor="middle" class="annual-chart-axis">${escapeHtml(m.month.slice(0, 3))}</text>`)
+    .join("");
+
+  return `<svg viewBox="0 0 ${w} ${h}" class="annual-chart" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Actual and projected income by month">
+    ${grid}
+    ${bars}
+    <polyline points="${points}" fill="none" class="annual-chart-line"/>
+    ${dots}
+    ${labels}
+  </svg>`;
+}
+
+/** The year-in-review card: nav, four totals, and the month-by-month chart. */
+function annualCard() {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.marginBottom = "20px";
+
+  const nav = `<div class="cal-head" style="margin-bottom:14px;">
+      <div class="cal-title">Year in review — ${annualYear}</div>
+      <div class="cal-nav">
+        <button data-annual-step="-1" title="Previous year">&larr;</button>
+        <button data-annual-step="0">This year</button>
+        <button data-annual-step="1" title="Next year">&rarr;</button>
+      </div>
+    </div>`;
+
+  if (annualStatus === "error") {
+    card.innerHTML = `${nav}<div class="empty-row">Couldn't load ${annualYear}: ${escapeHtml(annualError || "")}</div>`;
+    return card;
+  }
+  if (annualStatus === "loading" || !annualCache.has(annualYear)) {
+    card.innerHTML = `${nav}<div class="empty-row">Loading ${annualYear}...</div>`;
+    return card;
+  }
+
+  const a = annualCache.get(annualYear);
+  const months = a.months || [];
+  const gap = a.distanceToGoal;
+
+  card.innerHTML = `${nav}
+    <div class="annual-figure-row">
+      <div class="figure"><div class="figure-label">Annual sales</div><div class="figure-main"><div class="figure-num">${escapeHtml(money(a.annualSales))}</div></div></div>
+      <div class="figure tinted"><div class="figure-label">Projected $</div><div class="figure-main"><div class="figure-num">${escapeHtml(money(a.projectedTotal))}</div></div></div>
+      <div class="figure${gap < 0 ? " warn" : " tinted"}"><div class="figure-label">Distance to goal</div><div class="figure-main"><div class="figure-num">${escapeHtml(signedMoney(gap))}</div></div></div>
+      <div class="figure"><div class="figure-label">Average monthly sales</div><div class="figure-main"><div class="figure-num">${escapeHtml(money(a.averageMonthlySales))}</div></div></div>
+    </div>
+    ${
+      months.length
+        ? `<div class="annual-chart-wrap">${annualChart(months)}</div>
+           <div class="legend" style="margin-top:8px;">
+             <span><i style="background:var(--denim-blue)"></i>Actual</span>
+             <span><i style="background:var(--burnt-orange)"></i>Projected</span>
+           </div>`
+        : `<div class="empty-row">No Financial Summary rows for ${annualYear}.</div>`
+    }`;
+  return card;
+}
+
 // ---------- Money ----------
 
 function renderMoney() {
@@ -248,6 +392,8 @@ function renderMoney() {
 
   if (status.money === "error") return root.appendChild(errorCard(errors.money, "money"));
   if (status.money !== "done") return root.appendChild(loadingCard("Loading revenue, payments, and bills..."));
+
+  root.appendChild(annualCard());
 
   const revenue = d.revenue || {};
   const week = d.week || {};
@@ -2293,6 +2439,13 @@ $("dashboardCol").addEventListener("click", (event) => {
   const debtButton = event.target.closest("[data-debt-edit]");
   if (debtButton) return editDebt(debtButton);
 
+  const yearStep = event.target.closest("[data-annual-step]");
+  if (yearStep) {
+    const step = yearStep.dataset.annualStep;
+    loadAnnual(step === "0" ? new Date().getFullYear() : annualYear + Number(step));
+    return;
+  }
+
   const dueButton = event.target.closest(".due-control");
   if (!dueButton) return;
   if (dueButton.dataset.invoiceDue) editInvoiceDue(dueButton);
@@ -2352,6 +2505,7 @@ async function start() {
   }
 
   refresh();
+  loadAnnual(annualYear);
 }
 
 async function init() {

@@ -14,6 +14,7 @@ import { readSnapshot, writeSnapshot } from "../lib/cache.js";
 import { isSettled } from "../lib/moneyEdits.js";
 import { budgetRows, debtRows } from "../lib/budget.js";
 import { sumByCategory } from "../lib/categoryMap.js";
+import { MONTH_NAMES, summaryFields, annualSummary } from "../lib/annual.js";
 
 // Invoices in these states are settled or abandoned — neither is money coming in.
 const CLOSED_INVOICE_STATUSES = ["paid", "project cancelled", "delete"];
@@ -199,11 +200,6 @@ async function fetchDebts(env) {
   });
 }
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 /**
  * The month's goal, actual and projected close, from the one row per month in
  * the Financial Summary table. Everything here is already computed in Airtable
@@ -217,23 +213,18 @@ async function fetchMonthSummary(env, now, tz) {
   const local = localDate(now, tz);
   const monthName = MONTH_NAMES[Number(local.slice(5, 7)) - 1];
   const year = local.slice(0, 4);
-
-  const monthField = env.AIRTABLE_SUMMARY_MONTH_FIELD || "Month";
-  const yearField = env.AIRTABLE_SUMMARY_YEAR_FIELD || "Year";
-  const goalField = env.AIRTABLE_SUMMARY_GOAL_FIELD || "🎯 Income";
-  const actualField = env.AIRTABLE_SUMMARY_ACTUAL_FIELD || "💪🏾Total Income";
-  const projectedField = env.AIRTABLE_SUMMARY_PROJECTED_FIELD || "🤔 Expected Income";
+  const field = summaryFields(env);
 
   const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, table, {
-    filterByFormula: `AND({${monthField}} = ${airtable.quote(monthName)}, {${yearField}} = ${airtable.quote(year)})`,
+    filterByFormula: `AND({${field.month}} = ${airtable.quote(monthName)}, {${field.year}} = ${airtable.quote(year)})`,
     maxRecords: 1,
   });
   const row = records[0];
   if (!row) return null;
 
-  const goal = airtable.toAmount(row.fields?.[goalField]);
-  const actual = airtable.toAmount(row.fields?.[actualField]);
-  const projected = airtable.toAmount(row.fields?.[projectedField]);
+  const goal = airtable.toAmount(row.fields?.[field.goal]);
+  const actual = airtable.toAmount(row.fields?.[field.actual]);
+  const projected = airtable.toAmount(row.fields?.[field.projected]);
 
   return {
     label: `${monthName} ${year}`,
@@ -246,6 +237,51 @@ async function fetchMonthSummary(env, now, tz) {
     toGoal: Math.round(actual - goal),
     projectedToGoal: Math.round(projected - goal),
   };
+}
+
+/**
+ * GET /api/dashboard/money/annual?year=YYYY — every month of one year from
+ * the same Financial Summary table fetchMonthSummary reads, rolled up into
+ * the four figures Ashley already sees on Airtable's own "Year over Year
+ * Stats" page. A month with no row yet (the rest of a year in progress)
+ * still gets a bar at zero rather than a gap, so the chart's x-axis always
+ * runs January through December.
+ */
+export async function handleMoneyAnnual(env, ctx, url) {
+  const year = Number(url?.searchParams?.get("year")) || new Date().getUTCFullYear();
+  const warnings = [];
+  const summary = await softly(warnings, "Annual summary", fetchAnnualSummary(env, year), null);
+
+  return json({
+    ...(summary || annualSummary(year, MONTH_NAMES.map((month) => ({ month, goal: 0, actual: 0, projected: 0, hasRow: false })))),
+    warnings,
+  });
+}
+
+async function fetchAnnualSummary(env, year) {
+  const table = env.AIRTABLE_SUMMARY_TABLE;
+  if (!env.AIRTABLE_MONEY_BASE_ID || !table) return null;
+
+  const field = summaryFields(env);
+  const records = await airtable.listRecords(env, env.AIRTABLE_MONEY_BASE_ID, table, {
+    filterByFormula: `{${field.year}} = ${airtable.quote(String(year))}`,
+    maxRecords: 12,
+  });
+
+  const byMonth = new Map(records.map((row) => [airtable.toText(row.fields?.[field.month]), row]));
+  const monthRows = MONTH_NAMES.map((month) => {
+    const row = byMonth.get(month);
+    return {
+      month,
+      // Unrounded — annualSummary sums these before rounding anything.
+      goal: airtable.toAmount(row?.fields?.[field.goal]),
+      actual: airtable.toAmount(row?.fields?.[field.actual]),
+      projected: airtable.toAmount(row?.fields?.[field.projected]),
+      hasRow: Boolean(row),
+    };
+  });
+
+  return annualSummary(year, monthRows);
 }
 
 /**

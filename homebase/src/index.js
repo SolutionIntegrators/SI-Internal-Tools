@@ -15,7 +15,7 @@ import {
 } from "./lib/auth.js";
 import { handleTasks, cachedTasks } from "./routes/tasks.js";
 import { handleCalendar, cachedCalendar } from "./routes/calendar.js";
-import { handleMoney, cachedMoney } from "./routes/money.js";
+import { handleMoney, handleMoneyAnnual, cachedMoney } from "./routes/money.js";
 import { handleChat } from "./routes/chat.js";
 import { handleMonth } from "./routes/month.js";
 import { handleCreateTask } from "./routes/taskCreate.js";
@@ -96,6 +96,10 @@ async function route(request, env, ctx, url) {
 
   if (url.pathname === "/api/dashboard/month" && request.method === "GET") {
     return handleMonth(env, ctx, url);
+  }
+
+  if (url.pathname === "/api/dashboard/money/annual" && request.method === "GET") {
+    return handleMoneyAnnual(env, ctx, url);
   }
 
   if (url.pathname === "/api/tasks" && request.method === "POST") {

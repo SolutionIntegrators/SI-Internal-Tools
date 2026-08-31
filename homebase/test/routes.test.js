@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 import { handleTasks } from "../src/routes/tasks.js";
 import { handleCalendar, calendarConfigured } from "../src/routes/calendar.js";
-import { handleMoney } from "../src/routes/money.js";
+import { handleMoney, handleMoneyAnnual } from "../src/routes/money.js";
 
 // Mirrors the non-secret vars in wrangler.toml. Without the base ids the
 // fetches short-circuit before ever reaching a credential check, which makes
@@ -37,6 +37,7 @@ for (const [name, handler, expectedKeys] of [
   ["tasks", handleTasks, ["myTasksSoon", "overdue", "overdueCount", "urgent", "readyForReview", "supportTickets", "clientProjects", "contentPipeline"]],
   ["calendar", handleCalendar, ["nextCalls", "calendarToday", "calendarWeek"]],
   ["money", handleMoney, ["revenue", "month", "upcomingPayments", "upcomingBills", "week"]],
+  ["money/annual", handleMoneyAnnual, ["year", "months", "annualSales", "projectedTotal", "goalTotal", "distanceToGoal", "averageMonthlySales"]],
 ]) {
   test(`${name} endpoint answers with its full shape when every source is unconfigured`, async () => {
     const response = await handler(env, ctx);
@@ -125,4 +126,10 @@ test("the tabs get the shapes they render, not just the keys", async () => {
   assert.ok(Array.isArray(tasks.supportTickets.byClient));
   assert.equal(typeof tasks.supportTickets.openCount, "number");
   assert.ok(Array.isArray(tasks.clientProjects));
+
+  const annual = await (await handleMoneyAnnual(env, ctx, new URL("https://x/api/dashboard/money/annual?year=2026"))).json();
+  assert.equal(annual.year, 2026);
+  assert.equal(annual.months.length, 12);
+  assert.equal(typeof annual.annualSales, "number");
+  assert.equal(typeof annual.distanceToGoal, "number");
 });
